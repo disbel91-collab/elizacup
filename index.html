@@ -240,33 +240,23 @@
   .fixture-score .lose{color:#8a8a80;}
   .fixture-score .upcoming{color:#a8a296;font-style:italic;font-size:14px;}
 
-  /* ---------- Head-to-head modal ---------- */
-  .h2h-overlay{
-    display:none;position:fixed;inset:0;background:rgba(14,31,25,0.55);
-    z-index:100;padding:24px;overflow-y:auto;
-  }
-  .h2h-overlay.open{display:flex;align-items:flex-start;justify-content:center;}
-  .h2h-modal{
-    background:var(--chalk);border-radius:10px;max-width:900px;width:100%;
-    margin-top:20px; position:relative;padding:28px;
-    box-shadow:0 20px 60px rgba(0,0,0,0.35);
-  }
-  .h2h-close{
-    position:absolute;top:14px;right:14px;background:var(--pitch);color:#fff;
-    border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px;
+  /* ---------- Head-to-head section ---------- */
+  .h2h-card{
+    background:#fff;border:1px solid var(--line-light);border-radius:10px;
+    padding:24px;
   }
   .h2h-header{
     display:flex;align-items:center;justify-content:center;gap:20px;
     margin-bottom:6px;
   }
-  .h2h-team-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:26px;letter-spacing:0.02em;text-transform:uppercase;flex:1;}
+  .h2h-team-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:24px;letter-spacing:0.02em;text-transform:uppercase;flex:1;}
   .h2h-team-name.home{text-align:right;color:var(--pitch);}
   .h2h-team-name.away{text-align:left;color:var(--pitch);}
   .h2h-score-big{
-    font-family:'Barlow',sans-serif;font-weight:800;font-size:34px;color:var(--ink);
-    background:#fff;border:1px solid var(--line-light);border-radius:6px;padding:6px 18px;
+    font-family:'Barlow',sans-serif;font-weight:800;font-size:30px;color:var(--ink);
+    background:var(--chalk);border:1px solid var(--line-light);border-radius:6px;padding:6px 16px;
   }
-  .h2h-round-label{text-align:center;font-size:12px;color:#6b7c73;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:20px;}
+  .h2h-round-label{text-align:center;font-size:12px;color:#6b7c73;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:18px;}
 
   .h2h-lineups{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
   .h2h-side h4{
@@ -379,14 +369,16 @@
     <div id="roundTabs" class="round-tabs"></div>
     <div id="fixtureContainer" class="state-msg">Loading fixtures…</div>
   </section>
-</main>
 
-<div id="h2hOverlay" class="h2h-overlay">
-  <div class="h2h-modal">
-    <button id="h2hClose" class="h2h-close">✕</button>
-    <div id="h2hContent"></div>
-  </div>
-</div>
+  <section id="h2hSection" style="margin-top:48px;">
+    <div class="section-head">
+      <h2>Head-to-Head</h2>
+      <span class="sub" id="h2hRoundLabel">Current round</span>
+    </div>
+    <div id="h2hTabs" class="round-tabs"></div>
+    <div id="h2hContainer"></div>
+  </section>
+</main>
 
 <footer>
   Data pulled live from the Eliza Cup Google Sheet · built for the league, not affiliated with any official competition
@@ -583,6 +575,7 @@ function render(){
   renderTable();
   renderTicker();
   renderRoundTabs();
+  renderH2H();
 }
 
 function renderTable(){
@@ -673,32 +666,22 @@ function renderFixtures(round){
     return;
   }
   el.className = "fixture-grid";
-  el.innerHTML = fixtures.map((f,i)=>{
+  el.innerHTML = fixtures.map(f=>{
     const hasScore = f.homeScore !== null && f.awayScore !== null;
     const homeWin = hasScore && f.homeScore > f.awayScore;
     const awayWin = hasScore && f.awayScore > f.homeScore;
     const scoreHtml = hasScore
       ? `<span class="${homeWin?'win':(awayWin?'lose':'')}">${f.homeScore}</span> – <span class="${awayWin?'win':(homeWin?'lose':'')}">${f.awayScore}</span>`
       : `<span class="upcoming">vs</span>`;
-    return `<div class="fixture-card" data-round="${round}" data-idx="${i}">
+    return `<div class="fixture-card">
       <div class="fixture-team">${f.home}</div>
       <div class="fixture-score">${scoreHtml}</div>
       <div class="fixture-team right">${f.away}</div>
     </div>`;
   }).join("");
-  el.querySelectorAll('.fixture-card').forEach(card=>{
-    card.addEventListener('click', ()=>{
-      const r = card.dataset.round, i = card.dataset.idx;
-      openH2H(fixturesByRound[r][i]);
-    });
-  });
 }
 
 document.getElementById('refreshBtn').addEventListener('click', load);
-document.getElementById('h2hClose').addEventListener('click', closeH2H);
-document.getElementById('h2hOverlay').addEventListener('click', (e)=>{
-  if(e.target.id === 'h2hOverlay') closeH2H();
-});
 
 const POSITIONS = ["GK","DEF","DEF","DEF","MID","MID","MID","MID","ATT","ATT","ATT"];
 const BENCH_POSITIONS = ["GK","DEF","MID","ATT"];
@@ -734,17 +717,12 @@ function playerRowHtml(p){
   </div>`;
 }
 
-function openH2H(fixture){
-  // NOTE: this is currently showing SAMPLE/PLACEHOLDER lineup data for design review.
-  // Once the layout is approved, this will be wired to read the real H26:W42-style
-  // block from the sheet for the selected fixture.
-  const seedHome = fixture.home.length * 13 + fixture.homeScore || 5;
-  const seedAway = fixture.away.length * 17 + fixture.awayScore || 9;
+function h2hCardHtml(fixture){
+  const seedHome = fixture.home.length * 13 + (fixture.homeScore||5);
+  const seedAway = fixture.away.length * 17 + (fixture.awayScore||9);
   const home = buildSampleLineup(fixture.home, seedHome);
   const away = buildSampleLineup(fixture.away, seedAway);
-
-  const content = document.getElementById('h2hContent');
-  content.innerHTML = `
+  return `<div class="h2h-card">
     <div class="h2h-header">
       <div class="h2h-team-name home">${home.team}</div>
       <div class="h2h-score-big">${home.total} – ${away.total}</div>
@@ -773,13 +751,37 @@ function openH2H(fixture){
       <span>${away.team} total</span>
       <span class="val">${away.total}</span>
     </div>
-    <div class="h2h-draft-note">Draft preview — showing sample lineup data, not yet connected to the sheet</div>
-  `;
-  document.getElementById('h2hOverlay').classList.add('open');
+  </div>`;
 }
 
-function closeH2H(){
-  document.getElementById('h2hOverlay').classList.remove('open');
+function renderH2H(){
+  // NOTE: currently showing SAMPLE/PLACEHOLDER lineup data for design review.
+  // Once approved, this will read the real per-fixture H26:W42-style blocks
+  // (7 per round) from the sheet for whichever round is "current".
+  const rounds = Object.keys(fixturesByRound).map(Number).sort((a,b)=>a-b);
+  if(rounds.length === 0) return;
+  // "Current round" placeholder: most recent round with at least one scored fixture,
+  // falling back to the first round otherwise.
+  let currentRound = rounds[0];
+  for(let i=rounds.length-1;i>=0;i--){
+    if(fixturesByRound[rounds[i]].some(f=>f.homeScore!==null)){ currentRound = rounds[i]; break; }
+  }
+  const fixtures = fixturesByRound[currentRound].slice(0,7);
+  document.getElementById('h2hRoundLabel').textContent = `Round ${currentRound} · sample data`;
+
+  const tabsEl = document.getElementById('h2hTabs');
+  tabsEl.innerHTML = fixtures.map((f,i)=>`<button class="round-tab" data-idx="${i}">${f.home} v ${f.away}</button>`).join("");
+  tabsEl.querySelectorAll('.round-tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      tabsEl.querySelectorAll('.round-tab').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('h2hContainer').innerHTML = h2hCardHtml(fixtures[btn.dataset.idx]);
+    });
+  });
+  if(tabsEl.firstChild){
+    tabsEl.firstChild.classList.add('active');
+    document.getElementById('h2hContainer').innerHTML = h2hCardHtml(fixtures[0]);
+  }
 }
 
 load();
