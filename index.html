@@ -236,6 +236,7 @@
   }
   .fixture-score .win{color:var(--pitch-2);}
   .fixture-score .lose{color:#8a8a80;}
+  .fixture-score .upcoming{color:#a8a296;font-style:italic;font-size:14px;}
 
   .state-msg{
     font-family:'Barlow',sans-serif;font-size:13px;color:#6b7c73;
@@ -484,13 +485,12 @@ function parseFixtures(rows){
 
     const [homeHit, awayHit] = teamHits;
     const between = nonEmpty.slice(homeHit.idx+1, awayHit.idx).filter(c => /^\d{1,4}$/.test(c));
-    if(between.length < 2) continue;
 
     fixturesByRound[currentRound].push({
       home: homeHit.name,
       away: awayHit.name,
-      homeScore: parseInt(between[0],10),
-      awayScore: parseInt(between[between.length-1],10)
+      homeScore: between.length >= 1 ? parseInt(between[0],10) : null,
+      awayScore: between.length >= 2 ? parseInt(between[between.length-1],10) : null
     });
   }
 
@@ -554,14 +554,17 @@ function renderTable(){
 
 function renderTicker(){
   const rounds = Object.keys(fixturesByRound).map(Number).sort((a,b)=>a-b);
-  const lastRound = rounds[rounds.length-1];
+  // Find the most recent round that actually has scored results
+  let lastScoredRound = null;
+  for(let i=rounds.length-1;i>=0;i--){
+    const r = rounds[i];
+    if(fixturesByRound[r].some(f => f.homeScore !== null && f.awayScore !== null)){ lastScoredRound = r; break; }
+  }
   const track = document.getElementById('tickerTrack');
-  if(!lastRound){ track.innerHTML = "<span class='tick'>No results yet</span>"; return; }
-  const fixtures = fixturesByRound[lastRound];
+  if(!lastScoredRound){ track.innerHTML = "<span class='tick'>No results yet</span>"; return; }
+  const fixtures = fixturesByRound[lastScoredRound].filter(f => f.homeScore !== null && f.awayScore !== null);
   const ticks = fixtures.map(f=>{
-    const homeWin = f.homeScore > f.awayScore;
-    const awayWin = f.awayScore > f.homeScore;
-    return `<span class="tick">${f.home} <b>${homeWin? f.homeScore : f.homeScore}</b> <span class="vs">–</span> <b>${f.awayScore}</b> ${f.away}</span>`;
+    return `<span class="tick">${f.home} <b>${f.homeScore}</b> <span class="vs">–</span> <b>${f.awayScore}</b> ${f.away}</span>`;
   }).join("");
   track.innerHTML = ticks + ticks; // duplicate for seamless scroll
 }
@@ -597,13 +600,15 @@ function renderFixtures(round){
   }
   el.className = "fixture-grid";
   el.innerHTML = fixtures.map(f=>{
-    const homeWin = f.homeScore > f.awayScore;
-    const awayWin = f.awayScore > f.homeScore;
+    const hasScore = f.homeScore !== null && f.awayScore !== null;
+    const homeWin = hasScore && f.homeScore > f.awayScore;
+    const awayWin = hasScore && f.awayScore > f.homeScore;
+    const scoreHtml = hasScore
+      ? `<span class="${homeWin?'win':(awayWin?'lose':'')}">${f.homeScore}</span> – <span class="${awayWin?'win':(homeWin?'lose':'')}">${f.awayScore}</span>`
+      : `<span class="upcoming">vs</span>`;
     return `<div class="fixture-card">
       <div class="fixture-team">${f.home}</div>
-      <div class="fixture-score">
-        <span class="${homeWin?'win':(awayWin?'lose':'')}">${f.homeScore}</span> – <span class="${awayWin?'win':(homeWin?'lose':'')}">${f.awayScore}</span>
-      </div>
+      <div class="fixture-score">${scoreHtml}</div>
       <div class="fixture-team right">${f.away}</div>
     </div>`;
   }).join("");
