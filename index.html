@@ -408,6 +408,14 @@
     <div id="h2hTabs" class="round-tabs"></div>
     <div id="h2hContainer"></div>
   </section>
+
+  <section id="roddySection" style="display:none;">
+    <div class="section-head">
+      <h2>Roddy Rodriguez Cup</h2>
+      <span class="sub" id="roddyUpdated"></span>
+    </div>
+    <div id="roddyContainer" class="state-msg">Loading leaderboard…</div>
+  </section>
 </main>
 
 <footer>
@@ -423,11 +431,12 @@
 const SHEET_ID = "1pkSwNM4KpkFJ9MM1Pja2sOPrvZA9TKxI8tZJLigyKsY";
 
 const DIVISIONS = [
-  { id: "d1",  label: "Division 1 (Eliza Cup)", pill: "Div. 1",  gid: "1124941542", teams: 14, color: "#28427c" },
-  { id: "d2a", label: "Division 2A",            pill: "Div. 2A", gid: "919912875",  teams: 12, color: "#bc3532" },
-  { id: "d2b", label: "Division 2B",            pill: "Div. 2B", gid: "1047201294", teams: 12, color: "#990000" },
-  { id: "d3a", label: "Division 3A",            pill: "Div. 3A", gid: "688700661",  teams: 12, color: "#6aa84f" },
-  { id: "d3b", label: "Division 3B",            pill: "Div. 3B", gid: "2079252892", teams: 12, color: "#274e13" }
+  { id: "d1",  label: "Division 1 (Eliza Cup)", pill: "Div. 1",  gid: "1124941542", teams: 14, color: "#28427c", type: "division" },
+  { id: "d2a", label: "Division 2A",            pill: "Div. 2A", gid: "919912875",  teams: 12, color: "#bc3532", type: "division" },
+  { id: "d2b", label: "Division 2B",            pill: "Div. 2B", gid: "1047201294", teams: 12, color: "#990000", type: "division" },
+  { id: "d3a", label: "Division 3A",            pill: "Div. 3A", gid: "688700661",  teams: 12, color: "#6aa84f", type: "division" },
+  { id: "d3b", label: "Division 3B",            pill: "Div. 3B", gid: "2079252892", teams: 12, color: "#274e13", type: "division" },
+  { id: "roddy", label: "Roddy Rodriguez Cup",  pill: "Roddy",   gid: "418105482",  teams: 62, color: "#28427c", type: "roddy" }
 ];
 
 function lightenColor(hex, percent){
@@ -463,6 +472,8 @@ let standings = [];
 let fixturesByRound = {}; // { "1": [ {home,away,homeScore,awayScore} ] }
 let knownTeams = new Set();
 let formRoundLabels = [];
+let roddyEntries = [];
+let roddyDebug = {};
 
 function renderDivNav(){
   const nav = document.getElementById('divNav');
@@ -500,8 +511,48 @@ function setStatus(msg, ok){
   document.getElementById('refreshBtn').addEventListener('click', load);
 }
 
+function togglePageSections(){
+  const isRoddy = currentDivision.type === "roddy";
+  document.getElementById('tableSection').style.display = isRoddy ? "none" : "";
+  document.getElementById('fixturesSection').style.display = isRoddy ? "none" : "";
+  document.getElementById('h2hSection').style.display = isRoddy ? "none" : "";
+  document.getElementById('roddySection').style.display = isRoddy ? "" : "none";
+  document.querySelector('.ticker-wrap').style.display = isRoddy ? "none" : "";
+}
+
 async function load(){
+  togglePageSections();
   setStatus("Connecting to live sheet…");
+
+  if(currentDivision.type === "roddy"){
+    document.getElementById('roddyContainer').innerHTML = "Loading leaderboard…";
+    document.getElementById('roddyContainer').className = "state-msg";
+    try{
+      const res = await fetch(csvUrlFor(currentDivision));
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      const csvText = await res.text();
+      const parsed = Papa.parse(csvText, {skipEmptyLines:false});
+      const rows = parsed.data;
+
+      parseRoddy(rows);
+      renderRoddy();
+
+      document.getElementById('debugOut').textContent =
+        "Roddy entries found: " + roddyEntries.length + "\n" +
+        "Roddy debug: " + JSON.stringify(roddyDebug, null, 2) + "\n\n" +
+        JSON.stringify({sample: roddyEntries.slice(0,5)}, null, 2);
+
+      setStatus("Live — updated " + new Date().toLocaleString());
+    }catch(err){
+      console.error(err);
+      setStatus("Couldn't reach the sheet (" + err.message + ")", false);
+      document.getElementById('roddyContainer').className = "state-msg error";
+      document.getElementById('roddyContainer').innerHTML =
+        "Couldn't load live data. Make sure the sheet is shared as \"Anyone with the link can view\", then hit Refresh.";
+    }
+    return;
+  }
+
   document.getElementById('tableContainer').innerHTML = "Loading standings…";
   document.getElementById('tableContainer').className = "state-msg";
   document.getElementById('fixtureContainer').innerHTML = "Loading fixtures…";
@@ -986,6 +1037,112 @@ function renderH2H(){
   });
   tabsEl.firstChild.classList.add('active');
   containerEl.innerHTML = h2hCardHtml(h2hMatchups[0]);
+}
+
+// ---------- Roddy Rodriguez Cup (single combined leaderboard, all divisions) ----------
+function parseRoddy(rows){
+  roddyEntries = [];
+  roddyDebug = {};
+
+  // Find header row by locating the row that has TEAM / PLAYER / DIVISION / TOTAL as literal headers.
+  let headerRow = -1;
+  for(let r=0;r<rows.length;r++){
+    const upper = (rows[r]||[]).map(c => (c||"").toString().trim().toUpperCase());
+    if(upper.includes("TEAM") && upper.includes("PLAYER") && upper.includes("DIVISION") && upper.includes("TOTAL")){
+      headerRow = r; break;
+    }
+  }
+  roddyDebug.headerRow = headerRow;
+  if(headerRow === -1) return;
+
+  const dataStart = headerRow + 1;
+  const header = rows[headerRow] || [];
+  const findHeaderCol = (label) => {
+    for(let i=0;i<header.length;i++){
+      if((header[i]||"").toString().trim().toUpperCase() === label) return i;
+    }
+    return null;
+  };
+
+  const teamHeaderCol = findHeaderCol("TEAM");
+  const playerHeaderCol = findHeaderCol("PLAYER");
+  const divisionHeaderCol = findHeaderCol("DIVISION");
+  const totalHeaderCol = findHeaderCol("TOTAL");
+  const changeHeaderCol = findHeaderCol("CHANGE");
+  roddyDebug.headerCols = { teamHeaderCol, playerHeaderCol, divisionHeaderCol, totalHeaderCol, changeHeaderCol };
+
+  // Rank column has no header label, so find it by content: sequential 1,2,3...
+  let rankCol = null;
+  const width = (rows[dataStart]||[]).length;
+  for(let c=0;c<width;c++){
+    let ok = true;
+    for(let i=0;i<10;i++){
+      if(cell(rows[dataStart+i]||[], c) !== String(i+1)){ ok=false; break; }
+    }
+    if(ok){ rankCol = c; break; }
+  }
+  roddyDebug.rankCol = rankCol;
+  if(rankCol === null) return;
+
+  // Merged header cells (like "TEAM") often store their actual data 1-2 columns
+  // to the right of the header label — same issue we hit on the division tabs.
+  // Resolve by scanning a few columns right of the header for plausible content.
+  const resolveCol = (headerCol, validate, maxOffset=6) => {
+    if(headerCol === null) return null;
+    for(let off=0; off<=maxOffset; off++){
+      if(validate(cell(rows[dataStart]||[], headerCol+off))) return headerCol+off;
+    }
+    return headerCol;
+  };
+
+  const teamCol = resolveCol(teamHeaderCol, v => v && TEAM_NAME_RE.test(v));
+  const playerCol = resolveCol(playerHeaderCol, v => v && v.length > 0);
+  const divisionCol = resolveCol(divisionHeaderCol, v => v && v.length > 0);
+  const totalCol = resolveCol(totalHeaderCol, v => /^-?\d+$/.test(v));
+  const changeCol = changeHeaderCol;
+  roddyDebug.resolvedCols = { teamCol, playerCol, divisionCol, totalCol, changeCol };
+
+  for(let r=dataStart; r<rows.length; r++){
+    const rankVal = cell(rows[r]||[], rankCol);
+    if(!/^\d+$/.test(rankVal)) break; // stop once the sequential rank list ends
+    const team = cell(rows[r]||[], teamCol);
+    const player = cell(rows[r]||[], playerCol);
+    const division = cell(rows[r]||[], divisionCol);
+    const total = parseInt(cell(rows[r]||[], totalCol), 10) || 0;
+    const change = changeCol !== null ? cell(rows[r]||[], changeCol) : "";
+    if(!team && !player) continue;
+    roddyEntries.push({ rank: parseInt(rankVal,10), team, player, division, total, change });
+  }
+
+  roddyEntries.sort((a,b) => b.total - a.total);
+  roddyEntries.forEach((e,i) => e.rank = i+1);
+}
+
+function renderRoddy(){
+  const el = document.getElementById('roddyContainer');
+  if(roddyEntries.length === 0){
+    el.className = "state-msg error";
+    el.innerHTML = "Couldn't find the Roddy leaderboard. Check the Debug panel below.";
+    return;
+  }
+  el.className = "";
+  let html = `<div class="table-wrap"><table class="standings compact"><thead><tr>
+    <th>Rank</th><th>Player</th><th>Team</th><th>Division</th><th>Change</th><th>Total</th>
+  </tr></thead><tbody>`;
+  roddyEntries.forEach(e=>{
+    const changeClass = /^-\d/.test(e.change) ? "diff-neg" : (e.change && e.change !== "-" ? "diff-pos" : "");
+    html += `<tr>
+      <td>${e.rank}</td>
+      <td>${e.player || "—"}</td>
+      <td>${e.team || "—"}</td>
+      <td>${e.division || "—"}</td>
+      <td class="${changeClass}">${e.change || "—"}</td>
+      <td class="pts">${e.total}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  el.innerHTML = html;
+  document.getElementById('roddyUpdated').textContent = roddyEntries.length + " entries";
 }
 
 document.getElementById('divPill').textContent = currentDivision.pill;
