@@ -1044,78 +1044,47 @@ function parseRoddy(rows){
   roddyEntries = [];
   roddyDebug = {};
 
-  // Find header row by locating the row that has TEAM / PLAYER / DIVISION / TOTAL as literal headers.
+  // Confirmed exact columns: POS=F(5), TEAM=H(7), DIVISION=Q(16), ROUND=T(19), CHIP=V(21),
+  // chip-play indicators=AA:AD(26-29), OVERALL=AE(30).
+  const ROD_COL = { POS:5, TEAM:7, DIVISION:16, ROUND:19, CHIP:21, CHIPS:[26,27,28,29], OVERALL:30 };
+
+  // Find the header row by locating "TEAM" at column H, restricted to the top of the
+  // sheet (first 30 rows) so we don't accidentally match the broken #REF! table further down.
   let headerRow = -1;
-  for(let r=0;r<rows.length;r++){
-    const upper = (rows[r]||[]).map(c => (c||"").toString().trim().toUpperCase());
-    if(upper.includes("TEAM") && upper.includes("PLAYER") && upper.includes("DIVISION") && upper.includes("TOTAL")){
-      headerRow = r; break;
-    }
+  for(let r=0; r<Math.min(rows.length, 30); r++){
+    if(cell(rows[r]||[], ROD_COL.TEAM).toUpperCase() === "TEAM"){ headerRow = r; break; }
   }
   roddyDebug.headerRow = headerRow;
   if(headerRow === -1) return;
 
   const dataStart = headerRow + 1;
-  const header = rows[headerRow] || [];
-  const findHeaderCol = (label) => {
-    for(let i=0;i<header.length;i++){
-      if((header[i]||"").toString().trim().toUpperCase() === label) return i;
-    }
-    return null;
-  };
 
-  const teamHeaderCol = findHeaderCol("TEAM");
-  const playerHeaderCol = findHeaderCol("PLAYER");
-  const divisionHeaderCol = findHeaderCol("DIVISION");
-  const totalHeaderCol = findHeaderCol("TOTAL");
-  const changeHeaderCol = findHeaderCol("CHANGE");
-  roddyDebug.headerCols = { teamHeaderCol, playerHeaderCol, divisionHeaderCol, totalHeaderCol, changeHeaderCol };
-
-  // Rank column has no header label, so find it by content: sequential 1,2,3...
-  let rankCol = null;
-  const width = (rows[dataStart]||[]).length;
-  for(let c=0;c<width;c++){
-    let ok = true;
-    for(let i=0;i<10;i++){
-      if(cell(rows[dataStart+i]||[], c) !== String(i+1)){ ok=false; break; }
-    }
-    if(ok){ rankCol = c; break; }
+  // "TEAM" is a merged header cell, so the real team name in the data rows below
+  // may sit 1-2 columns to the right — resolve with a small tolerance scan.
+  let teamCol = ROD_COL.TEAM;
+  for(let off=0; off<=4; off++){
+    const v = cell(rows[dataStart]||[], ROD_COL.TEAM + off);
+    if(v && TEAM_NAME_RE.test(v)){ teamCol = ROD_COL.TEAM + off; break; }
   }
-  roddyDebug.rankCol = rankCol;
-  if(rankCol === null) return;
-
-  // Merged header cells (like "TEAM") often store their actual data 1-2 columns
-  // to the right of the header label — same issue we hit on the division tabs.
-  // Resolve by scanning a few columns right of the header for plausible content.
-  const resolveCol = (headerCol, validate, maxOffset=6) => {
-    if(headerCol === null) return null;
-    for(let off=0; off<=maxOffset; off++){
-      if(validate(cell(rows[dataStart]||[], headerCol+off))) return headerCol+off;
-    }
-    return headerCol;
-  };
-
-  const teamCol = resolveCol(teamHeaderCol, v => v && TEAM_NAME_RE.test(v));
-  const playerCol = resolveCol(playerHeaderCol, v => v && v.length > 0);
-  const divisionCol = resolveCol(divisionHeaderCol, v => v && v.length > 0);
-  const totalCol = resolveCol(totalHeaderCol, v => /^-?\d+$/.test(v));
-  const changeCol = changeHeaderCol;
-  roddyDebug.resolvedCols = { teamCol, playerCol, divisionCol, totalCol, changeCol };
+  roddyDebug.teamCol = teamCol;
 
   for(let r=dataStart; r<rows.length; r++){
-    const rankVal = cell(rows[r]||[], rankCol);
-    if(!/^\d+$/.test(rankVal)) break; // stop once the sequential rank list ends
+    const posVal = cell(rows[r]||[], ROD_COL.POS);
+    if(!/^\d+$/.test(posVal)) break; // stop once the sequential position list ends
+
     const team = cell(rows[r]||[], teamCol);
-    const player = cell(rows[r]||[], playerCol);
-    const division = cell(rows[r]||[], divisionCol);
-    const total = parseInt(cell(rows[r]||[], totalCol), 10) || 0;
-    const change = changeCol !== null ? cell(rows[r]||[], changeCol) : "";
-    if(!team && !player) continue;
-    roddyEntries.push({ rank: parseInt(rankVal,10), team, player, division, total, change });
+    const division = cell(rows[r]||[], ROD_COL.DIVISION);
+    const round = cell(rows[r]||[], ROD_COL.ROUND);
+    const chip = cell(rows[r]||[], ROD_COL.CHIP);
+    const chips = ROD_COL.CHIPS.map(c => cell(rows[r]||[], c));
+    const overall = parseInt(cell(rows[r]||[], ROD_COL.OVERALL), 10) || 0;
+
+    if(!team) continue;
+    roddyEntries.push({ pos: parseInt(posVal,10), team, division, round, chip, chips, overall });
   }
 
-  roddyEntries.sort((a,b) => b.total - a.total);
-  roddyEntries.forEach((e,i) => e.rank = i+1);
+  roddyEntries.sort((a,b) => b.overall - a.overall);
+  roddyEntries.forEach((e,i) => e.pos = i+1);
 }
 
 function renderRoddy(){
@@ -1127,17 +1096,18 @@ function renderRoddy(){
   }
   el.className = "";
   let html = `<div class="table-wrap"><table class="standings compact"><thead><tr>
-    <th>Rank</th><th>Player</th><th>Team</th><th>Division</th><th>Change</th><th>Total</th>
+    <th>Pos</th><th>Team</th><th>Division</th><th>Round</th><th>Chip</th>
+    <th>Chip 1</th><th>Chip 2</th><th>Chip 3</th><th>Chip 4</th><th>Overall</th>
   </tr></thead><tbody>`;
   roddyEntries.forEach(e=>{
-    const changeClass = /^-\d/.test(e.change) ? "diff-neg" : (e.change && e.change !== "-" ? "diff-pos" : "");
     html += `<tr>
-      <td>${e.rank}</td>
-      <td>${e.player || "—"}</td>
+      <td>${e.pos}</td>
       <td>${e.team || "—"}</td>
       <td>${e.division || "—"}</td>
-      <td class="${changeClass}">${e.change || "—"}</td>
-      <td class="pts">${e.total}</td>
+      <td>${e.round || "—"}</td>
+      <td>${e.chip || "—"}</td>
+      ${e.chips.map(c => `<td>${c || "—"}</td>`).join("")}
+      <td class="pts">${e.overall}</td>
     </tr>`;
   });
   html += `</tbody></table></div>`;
