@@ -87,6 +87,17 @@
   }
   .refresh-btn:hover{border-color:var(--turf);color:var(--turf);}
 
+  .div-nav{
+    display:flex;gap:6px;flex-wrap:wrap;padding-bottom:12px;
+  }
+  .div-tab{
+    font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;
+    padding:7px 14px;border-radius:20px;border:1px solid var(--line);
+    background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s;
+  }
+  .div-tab:hover{border-color:var(--amber);color:var(--chalk);}
+  .div-tab.active{background:var(--amber);border-color:var(--amber);color:var(--ink);}
+
   /* ---------- Ticker (signature element) ---------- */
   .ticker-wrap{
     background:var(--ink);
@@ -353,8 +364,9 @@
 <header class="top">
   <div class="top-inner">
     <div class="wordmark-row">
-      <h1 class="wordmark">Eliza Cup <span class="pill">Div. 1</span></h1>
+      <h1 class="wordmark">Eliza Cup <span class="pill" id="divPill">Div. 1</span></h1>
     </div>
+    <nav class="div-nav" id="divNav"></nav>
     <div class="status-line" id="statusLine">
       <span><span class="dot"></span> Connecting to live sheet…</span>
       <button class="refresh-btn" id="refreshBtn">↻ Refresh</button>
@@ -414,8 +426,25 @@
 
 <script>
 const SHEET_ID = "1pkSwNM4KpkFJ9MM1Pja2sOPrvZA9TKxI8tZJLigyKsY";
-const GID = "1124941542"; // Eliza Cup (D1) tab
-const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}&cachebust=` + Date.now();
+
+const DIVISIONS = [
+  { id: "d1",  label: "Division 1 (Eliza Cup)", pill: "Div. 1",  gid: "1124941542", teams: 14 },
+  { id: "d2a", label: "Division 2A",            pill: "Div. 2A", gid: "919912875",  teams: 12 },
+  { id: "d2b", label: "Division 2B",            pill: "Div. 2B", gid: "1047201294", teams: 12 },
+  { id: "d3a", label: "Division 3A",            pill: "Div. 3A", gid: "688700661",  teams: 12 },
+  { id: "d3b", label: "Division 3B",            pill: "Div. 3B", gid: "2079252892", teams: 12 }
+];
+
+function getDivisionFromHash(){
+  const id = (location.hash || "").replace("#","");
+  return DIVISIONS.find(d => d.id === id) || DIVISIONS[0];
+}
+
+let currentDivision = getDivisionFromHash();
+
+function csvUrlFor(division){
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${division.gid}&cachebust=` + Date.now();
+}
 
 const TEAM_NAME_RE = /^[A-Z0-9][A-Z0-9 .'’()\-\/]{2,}$/; // ALL CAPS-ish team names as used in the sheet
 const ROLE_TOKENS = new Set(["GK","DEF","MID","ATT","VC","C"]);
@@ -424,6 +453,35 @@ let standings = [];
 let fixturesByRound = {}; // { "1": [ {home,away,homeScore,awayScore} ] }
 let knownTeams = new Set();
 let formRoundLabels = [];
+
+function renderDivNav(){
+  const nav = document.getElementById('divNav');
+  nav.innerHTML = DIVISIONS.map(d =>
+    `<button class="div-tab${d.id===currentDivision.id?' active':''}" data-id="${d.id}">${d.label}</button>`
+  ).join("");
+  nav.querySelectorAll('.div-tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const div = DIVISIONS.find(d=>d.id===btn.dataset.id);
+      if(div.id === currentDivision.id) return;
+      currentDivision = div;
+      location.hash = div.id;
+      document.getElementById('divPill').textContent = div.pill;
+      renderDivNav();
+document.getElementById('divPill').textContent = currentDivision.pill;
+renderDivNav();
+load();
+    });
+  });
+}
+
+window.addEventListener('hashchange', ()=>{
+  const div = getDivisionFromHash();
+  if(div.id === currentDivision.id) return;
+  currentDivision = div;
+  document.getElementById('divPill').textContent = div.pill;
+  renderDivNav();
+  load();
+});
 
 function setStatus(msg, ok){
   document.getElementById('statusLine').innerHTML =
@@ -440,7 +498,7 @@ async function load(){
   document.getElementById('fixtureContainer').className = "state-msg";
 
   try{
-    const res = await fetch(CSV_URL);
+    const res = await fetch(csvUrlFor(currentDivision));
     if(!res.ok) throw new Error("HTTP " + res.status);
     const csvText = await res.text();
     const parsed = Papa.parse(csvText, {skipEmptyLines:false});
@@ -571,7 +629,7 @@ function parseH2H(rows){
       awayBench: bench.map(p=>p.away)
     });
 
-    if(h2hMatchups.length >= 7) break;
+    if(h2hMatchups.length >= Math.floor(currentDivision.teams / 2)) break;
   }
 }
 
@@ -581,7 +639,7 @@ function parseH2H(rows){
 // actually lands at CSV index 3, not 5. Columns were already confirmed correct.
 const TABLE_HEADER_ROW = 3;   // sheet row 6, offset -2
 const TABLE_DATA_START = 4;   // sheet row 7, offset -2
-const TABLE_DATA_END = 17;    // sheet row 20, offset -2
+function tableDataEnd(){ return TABLE_DATA_START + currentDivision.teams - 1; }
 const COL = {
   POS:1, TEAM:3, PTS:8, W:9, D:10, L:11, FOR:12, AGA:13, DIFF:14
 };
@@ -620,7 +678,7 @@ function parseStandings(rows){
   formRoundLabels = formCols ? formCols.map(i => cell(headerRow, i)) : [];
   const nextOppCol = findColumnByHeader(headerRow, "NEXT OPPONENT");
 
-  for(let r = TABLE_DATA_START; r <= TABLE_DATA_END && r < rows.length; r++){
+  for(let r = TABLE_DATA_START; r <= tableDataEnd() && r < rows.length; r++){
     const row = rows[r];
     const team = cell(row, COL.TEAM);
     const pts = cell(row, COL.PTS);
