@@ -1049,11 +1049,11 @@ function parseRoddy(rows){
   // chip-play indicators=AA:AD(26-29), OVERALL=AE(30).
   const ROD_COL = { POS:5, TEAM:7, DIVISION:16, ROUND:19, CHIP:21, CHIPS:[26,27,28,29], OVERALL:30 };
 
-  // Find the header row by locating "TEAM" at column H, restricted to the top of the
+  // Find the header row by locating "POS" at column F, restricted to the top of the
   // sheet (first 30 rows) so we don't accidentally match the broken #REF! table further down.
   let headerRow = -1;
   for(let r=0; r<Math.min(rows.length, 30); r++){
-    if(cell(rows[r]||[], ROD_COL.TEAM).toUpperCase() === "TEAM"){ headerRow = r; break; }
+    if(cell(rows[r]||[], ROD_COL.POS).toUpperCase() === "POS"){ headerRow = r; break; }
   }
   roddyDebug.headerRow = headerRow;
   if(headerRow === -1){
@@ -1066,8 +1066,7 @@ function parseRoddy(rows){
 
   const dataStart = headerRow + 1;
 
-  // "TEAM" is a merged header cell, so the real team name in the data rows below
-  // may sit 1-2 columns to the right — resolve with a small tolerance scan.
+  // Team name sits directly at column H for data rows (confirmed, no merge offset here).
   let teamCol = ROD_COL.TEAM;
   for(let off=0; off<=4; off++){
     const v = cell(rows[dataStart]||[], ROD_COL.TEAM + off);
