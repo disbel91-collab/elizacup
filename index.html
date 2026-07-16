@@ -1798,7 +1798,7 @@ function parseECLFixtures(rows){
   const titleRows = [];
   for(let r=0; r<rows.length; r++){
     for(let c=28; c<=44; c++){
-      const m = cell(rows[r]||[], c).toUpperCase().match(/^MD(\d)$/);
+      const m = cell(rows[r]||[], c).toUpperCase().match(/MD(\d)/);
       if(m){ titleRows.push({ row: r, matchday: "MD" + m[1] }); break; }
     }
   }
