@@ -478,6 +478,14 @@
     <div id="facupRoundTabs" class="round-tabs"></div>
     <div id="facupContainer" class="state-msg">Loading bracket…</div>
   </section>
+
+  <section id="eclSection" style="display:none;">
+    <div class="section-head">
+      <h2>Eliza Champions League</h2>
+      <span class="sub" id="eclUpdated"></span>
+    </div>
+    <div id="eclContainer" class="state-msg">Loading group tables…</div>
+  </section>
 </main>
 
 <footer>
@@ -499,7 +507,8 @@ const DIVISIONS = [
   { id: "d3a", label: "Division 3A",            pill: "Div. 3A", gid: "688700661",  teams: 12, color: "#6aa84f", type: "division" },
   { id: "d3b", label: "Division 3B",            pill: "Div. 3B", gid: "2079252892", teams: 12, color: "#274e13", type: "division" },
   { id: "roddy", label: "Roddy Rodriguez Cup",  pill: "Roddy",   gid: "418105482",  teams: 62, color: "#28427c", type: "roddy" },
-  { id: "facup", label: "Eliza FA Cup",         pill: "FA Cup",  gid: "2398203",    teams: 64, color: "#0a2f85", type: "facup" }
+  { id: "facup", label: "Eliza FA Cup",         pill: "FA Cup",  gid: "2398203",    teams: 64, color: "#0a2f85", type: "facup" },
+  { id: "ecl",   label: "Eliza Champions League", pill: "ECL",   gid: "1490882074", teams: 12, color: "#111111", type: "ecl" }
 ];
 
 function lightenColor(hex, percent){
@@ -579,11 +588,13 @@ function togglePageSections(){
   const isDivision = type === "division";
   const isRoddy = type === "roddy";
   const isFACup = type === "facup";
+  const isECL = type === "ecl";
   document.getElementById('tableSection').style.display = isDivision ? "" : "none";
   document.getElementById('fixturesSection').style.display = isDivision ? "" : "none";
   document.getElementById('h2hSection').style.display = isDivision ? "" : "none";
   document.getElementById('roddySection').style.display = isRoddy ? "" : "none";
   document.getElementById('facupSection').style.display = isFACup ? "" : "none";
+  document.getElementById('eclSection').style.display = isECL ? "" : "none";
   document.querySelector('.ticker-wrap').style.display = isDivision ? "" : "none";
 }
 
@@ -650,6 +661,35 @@ async function load(){
       setStatus("Couldn't reach the sheet (" + err.message + ")", false);
       document.getElementById('facupContainer').className = "state-msg error";
       document.getElementById('facupContainer').innerHTML =
+        "Couldn't load live data. Make sure the sheet is shared as \"Anyone with the link can view\", then hit Refresh.";
+    }
+    return;
+  }
+
+  if(currentDivision.type === "ecl"){
+    document.getElementById('eclContainer').innerHTML = "Loading group tables…";
+    document.getElementById('eclContainer').className = "state-msg";
+    try{
+      const res = await fetch(csvUrlFor(currentDivision));
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      const csvText = await res.text();
+      const parsed = Papa.parse(csvText, {skipEmptyLines:false});
+      const rows = parsed.data;
+
+      parseECL(rows);
+      renderECL();
+
+      document.getElementById('debugOut').textContent =
+        "ECL groups found: " + eclGroups.length + "\n" +
+        "ECL debug: " + JSON.stringify(eclDebug, null, 2) + "\n\n" +
+        JSON.stringify({groups: eclGroups.map(g=>({label:g.label, teamCount:g.teams.length, sample:g.teams.slice(0,2)}))}, null, 2);
+
+      setStatus("Live — updated " + new Date().toLocaleString());
+    }catch(err){
+      console.error(err);
+      setStatus("Couldn't reach the sheet (" + err.message + ")", false);
+      document.getElementById('eclContainer').className = "state-msg error";
+      document.getElementById('eclContainer').innerHTML =
         "Couldn't load live data. Make sure the sheet is shared as \"Anyone with the link can view\", then hit Refresh.";
     }
     return;
@@ -1368,6 +1408,8 @@ function parseFACup(rows){
   facupDebug.roundMarkersFound = roundMarkers;
   if(roundMarkers.length === 0) return;
 
+  const isByeText = v => (v||"").trim().toUpperCase() === "BYE";
+
   roundMarkers.forEach((marker, i) => {
     const startRow = marker.row;
     const endRow = i+1 < roundMarkers.length ? roundMarkers[i+1].row : rows.length;
@@ -1376,18 +1418,32 @@ function parseFACup(rows){
     for(let r=startRow; r<endRow; r++){
       const homeRaw = cell(rows[r]||[], FACUP_COL.HOME_TEAM);
       const awayRaw = cell(rows[r]||[], FACUP_COL.AWAY_TEAM);
+      const homeScoreRaw = cell(rows[r]||[], FACUP_COL.HOME_SCORE);
+      const awayScoreRaw = cell(rows[r]||[], FACUP_COL.AWAY_SCORE);
+
+      const homeHasTeam = /\(.+\)/.test(homeRaw);
+      const awayHasTeam = /\(.+\)/.test(awayRaw);
       // A valid fixture row has a team name with a "(DIVISION)" tag on at least one side.
-      if(!/\(.+\)/.test(homeRaw) && !/\(.+\)/.test(awayRaw)) continue;
+      if(!homeHasTeam && !awayHasTeam) continue;
 
       const home = parseTeamDiv(homeRaw);
       const away = parseTeamDiv(awayRaw);
-      const homeScoreRaw = cell(rows[r]||[], FACUP_COL.HOME_SCORE);
-      const awayScoreRaw = cell(rows[r]||[], FACUP_COL.AWAY_SCORE);
-      const isBye = homeScoreRaw.toUpperCase() === "BYE" || awayScoreRaw.toUpperCase() === "BYE";
+
+      // A bye row has a real team on one side, and on the other side either the
+      // literal word "BYE" (in the team cell or the score cell) or a genuinely
+      // empty cell. A "(DIV)"-less placeholder like "TBD" is NOT a bye — it's a
+      // future-round slot still waiting on a result, so it's left alone.
+      const sideIsBye = (raw, scoreRaw, hasTeam) =>
+        isByeText(raw) || isByeText(scoreRaw) || (!hasTeam && (raw||"").trim() === "");
+      const homeIsBye = sideIsBye(homeRaw, homeScoreRaw, homeHasTeam);
+      const awayIsBye = sideIsBye(awayRaw, awayScoreRaw, awayHasTeam);
+      const isBye = homeIsBye !== awayIsBye; // exactly one side is the placeholder
+      const byeSide = isBye ? (homeIsBye ? "home" : "away") : null;
+
       const homeScore = /^\d+$/.test(homeScoreRaw) ? parseInt(homeScoreRaw,10) : null;
       const awayScore = /^\d+$/.test(awayScoreRaw) ? parseInt(awayScoreRaw,10) : null;
 
-      fixtures.push({ home, away, homeScore, awayScore, isBye });
+      fixtures.push({ home, away, homeScore, awayScore, isBye, byeSide });
     }
 
     facupRounds.push({ name: marker.name, fixtures });
@@ -1430,7 +1486,7 @@ function renderFACupRound(idx){
       <h4>Byes this round</h4>
       <div class="facup-bye-list">
         ${byeFixtures.map(f=>{
-          const team = f.home.name ? f.home : f.away;
+          const team = f.byeSide === "home" ? f.away : f.home;
           return `<div class="facup-bye-pill">${team.name || "TBD"}${team.division ? ` <span class="roddy-div-tag" style="background:${getDivisionColorByLabel(team.division)};font-size:9px;">${team.division}</span>` : ""}</div>`;
         }).join("")}
       </div>
@@ -1438,6 +1494,125 @@ function renderFACupRound(idx){
   }
 
   container.innerHTML = html;
+}
+
+// ---------- Eliza Champions League (group stage tables) ----------
+// Confirmed columns: POS=B(1), TEAM=D:G(3-6, merged), PTS=H(7), W=I(8), D=J(9), L=K(10),
+// PTS+=L(11), PTS-=M(12), DIFF=N(13), MD1=Q(16), MD2=R(17), MD3=S(18),
+// NEXT OPPONENT=T:W(19-22, merged), STATUS=X:Z(23-25, merged).
+const ECL_COL = {
+  POS: 1, TEAM_START: 3, TEAM_END: 6,
+  PTS: 7, W: 8, D: 9, L: 10, PTS_FOR: 11, PTS_AGN: 12, DIFF: 13,
+  MD1: 16, MD2: 17, MD3: 18,
+  NEXTOPP_START: 19, NEXTOPP_END: 22,
+  STATUS_START: 23, STATUS_END: 25
+};
+
+let eclGroups = [];
+let eclDebug = {};
+
+function mergedCell(row, start, end){
+  for(let c=start; c<=end; c++){
+    const v = cell(row, c);
+    if(v) return v;
+  }
+  return "";
+}
+
+function parseECL(rows){
+  eclGroups = [];
+  eclDebug = { groupHeadersFound: [] };
+
+  // Group header rows contain "ELIZA CHAMPIONS LEAGUE - GROUP A/B/C" — scan a few
+  // leading columns since merged cells can shift the text right slightly.
+  const groupHeaderRows = [];
+  for(let r=0; r<rows.length; r++){
+    for(let c=0; c<=8; c++){
+      const v = cell(rows[r]||[], c);
+      const m = v.match(/ELIZA CHAMPIONS LEAGUE\s*-\s*GROUP\s*([A-Z])/i);
+      if(m){ groupHeaderRows.push({ row: r, label: "Group " + m[1].toUpperCase() }); break; }
+    }
+  }
+  eclDebug.groupHeadersFound = groupHeaderRows;
+
+  groupHeaderRows.forEach(gh => {
+    // The POS/TEAM column-header row sits within the next few rows.
+    let headerRow = -1;
+    for(let r=gh.row; r<gh.row+4 && r<rows.length; r++){
+      if(cell(rows[r]||[], ECL_COL.POS).toUpperCase() === "POS"){ headerRow = r; break; }
+    }
+    if(headerRow === -1) return;
+
+    const teams = [];
+    for(let r=headerRow+1; r<headerRow+13 && r<rows.length; r++){
+      const posRaw = cell(rows[r]||[], ECL_COL.POS);
+      const teamName = mergedCell(rows[r]||[], ECL_COL.TEAM_START, ECL_COL.TEAM_END);
+      if(!/^\d+$/.test(posRaw) || !teamName) break; // stop once we run out of data rows
+
+      teams.push({
+        pos: parseInt(posRaw, 10),
+        team: teamName,
+        pts: cell(rows[r]||[], ECL_COL.PTS),
+        w: cell(rows[r]||[], ECL_COL.W),
+        d: cell(rows[r]||[], ECL_COL.D),
+        l: cell(rows[r]||[], ECL_COL.L),
+        ptsFor: cell(rows[r]||[], ECL_COL.PTS_FOR),
+        ptsAgn: cell(rows[r]||[], ECL_COL.PTS_AGN),
+        diff: cell(rows[r]||[], ECL_COL.DIFF),
+        md1: cell(rows[r]||[], ECL_COL.MD1),
+        md2: cell(rows[r]||[], ECL_COL.MD2),
+        md3: cell(rows[r]||[], ECL_COL.MD3),
+        nextOpponent: mergedCell(rows[r]||[], ECL_COL.NEXTOPP_START, ECL_COL.NEXTOPP_END),
+        status: mergedCell(rows[r]||[], ECL_COL.STATUS_START, ECL_COL.STATUS_END)
+      });
+    }
+    eclGroups.push({ label: gh.label, teams });
+  });
+}
+
+function eclGroupTableHtml(g){
+  let html = `<div class="section-head" style="margin-top:28px;">
+      <h3 style="font-family:'Barlow Condensed',sans-serif;font-size:20px;margin:0;letter-spacing:0.02em;">${g.label}</h3>
+    </div>
+    <div class="table-wrap"><table class="standings compact"><thead><tr>
+      <th>Pos</th><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th>
+      <th>Pts+</th><th>Pts-</th><th>Diff</th><th>MD1</th><th>MD2</th><th>MD3</th><th>Next</th><th>Status</th>
+    </tr></thead><tbody>`;
+  g.teams.forEach(t=>{
+    const diffNum = parseInt(t.diff, 10);
+    const diffClass = diffNum > 0 ? "diff-pos" : diffNum < 0 ? "diff-neg" : "";
+    html += `<tr>
+      <td>${t.pos}</td>
+      <td>${t.team}</td>
+      <td class="pts">${t.pts}</td>
+      <td>${t.w}</td>
+      <td>${t.d}</td>
+      <td>${t.l}</td>
+      <td>${t.ptsFor}</td>
+      <td>${t.ptsAgn}</td>
+      <td class="${diffClass}">${!isNaN(diffNum) && diffNum > 0 ? "+" : ""}${t.diff}</td>
+      <td>${t.md1 || "—"}</td>
+      <td>${t.md2 || "—"}</td>
+      <td>${t.md3 || "—"}</td>
+      <td class="next-opp">${t.nextOpponent || "—"}</td>
+      <td>${t.status || "—"}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  return html;
+}
+
+function renderECL(){
+  const container = document.getElementById('eclContainer');
+  if(eclGroups.length === 0){
+    container.className = "state-msg error";
+    container.innerHTML = "Couldn't find the ECL group tables. Check the Debug panel below.";
+    document.getElementById('eclUpdated').textContent = "";
+    return;
+  }
+  container.className = "";
+  container.innerHTML = eclGroups.map(eclGroupTableHtml).join("");
+  document.getElementById('eclUpdated').textContent = eclGroups.length + " groups";
 }
 
 function renderFACup(){
