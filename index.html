@@ -2040,10 +2040,20 @@ function parseHonourRoll(rows){
 
   const seasonMap = {}; // year -> season object
 
+  // Always include a raw dump of the first ~40 rows (all non-empty cells) so the real
+  // structure is visible for diagnosis if detection below doesn't land correctly —
+  // same approach that worked for the ECL tables.
+  honourDebug.rawRowDump = rows.slice(0, 40).map((row, r) =>
+    "row" + r + ": " + (row || []).map((c, ci) => c ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
+  );
+
   // ---- Table 1: Head to Head Title Winners (Eliza Cup, Shield, Div 2/3 + shields) ----
   let t1Title = -1;
   for(let r=0; r<rows.length; r++){
-    if(/HEAD TO HEAD TITLE WINNERS/i.test(cell(rows[r]||[], 0))){ t1Title = r; break; }
+    for(let c=0; c<=3; c++){
+      if(/HEAD TO HEAD TITLE WINNERS/i.test(cell(rows[r]||[], c))){ t1Title = r; break; }
+    }
+    if(t1Title !== -1) break;
   }
   honourDebug.table1TitleRow = t1Title;
 
@@ -2089,8 +2099,10 @@ function parseHonourRoll(rows){
   // ---- Table 2: Roddy, FA Cup & ECL Title Winners ----
   let t2Title = -1;
   for(let r=0; r<rows.length; r++){
-    if(/RODDY.*FA CUP.*ELIZA CHAMPIONS LEAGUE TITLE WINNERS/i.test(cell(rows[r]||[], 1)) ||
-       /RODDY.*FA CUP.*ELIZA CHAMPIONS LEAGUE TITLE WINNERS/i.test(cell(rows[r]||[], 0))){ t2Title = r; break; }
+    for(let c=0; c<=3; c++){
+      if(/RODDY.*FA CUP.*ELIZA CHAMPIONS LEAGUE/i.test(cell(rows[r]||[], c))){ t2Title = r; break; }
+    }
+    if(t2Title !== -1) break;
   }
   honourDebug.table2TitleRow = t2Title;
 
