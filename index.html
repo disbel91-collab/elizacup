@@ -696,6 +696,7 @@ async function load(){
 
       parseECL(rows);
       parseECLQualifiers(rows);
+      parseECLFixtures(rows);
       renderECL();
 
       document.getElementById('debugOut').textContent =
@@ -703,6 +704,9 @@ async function load(){
         "ECL debug: " + JSON.stringify(eclDebug, null, 2) + "\n\n" +
         "ECL qualifiers found: " + eclQualifiers.length + "\n" +
         "ECL qualifiers debug: " + JSON.stringify(eclQualifiersDebug, null, 2) + "\n\n" +
+        "ECL fixtures found: " + eclFixtures.length + "\n" +
+        "ECL fixtures: " + JSON.stringify(eclFixtures, null, 2) + "\n\n" +
+        "ECL fixtures debug: " + JSON.stringify(eclFixturesDebug, null, 2) + "\n\n" +
         JSON.stringify({groups: eclGroups.map(g=>({label:g.label, teamCount:g.teams.length, sample:g.teams.slice(0,2)})), qualifiersSample: eclQualifiers.slice(0,3)}, null, 2);
 
       setStatus("Live — updated " + new Date().toLocaleString());
@@ -1621,27 +1625,23 @@ let eclQualifiers = [];
 let eclQualifiersDebug = {};
 
 // Confirmed columns: POS=B(1), TEAM=D:G(3-6, merged), GROUP POS=H(7), PTS=I(8),
-// PTS+=J:K(9-10, merged), RODDY=L:M(11-12, merged), STATUS=N:R(13-17, merged).
-// Confirmed columns: POS=B(1), TEAM=D:G(3-6, merged), GROUP POS=H(7), PTS=I(8),
-// PTS+=J:K(9-10, merged), RODDY=L:M(11-12, merged), STATUS=N:R (nominally 13-17, merged) —
-// but this cell isn't landing where expected, so status is found by scanning for
-// recognizable keywords across a wider window instead of trusting the fixed range.
+// Confirmed columns (post-restructure, no longer merged): POS=B(1), TEAM=D:G(3-6, merged),
+// GROUP POS=H(7), PTS=I(8), PTS+=J(9), RODDY=K(10), STATUS=L(11, plain text "SEMI"/"QUARTER").
 const ECL_QUAL_COL = {
   POS: 1, TEAM_START: 3, TEAM_END: 6, GROUP_POS: 7, PTS: 8,
-  PTS_PLUS_START: 9, PTS_PLUS_END: 10,
-  RODDY_START: 11, RODDY_END: 12,
-  STATUS_START: 13, STATUS_END: 17
+  PTS_PLUS: 9, RODDY: 10, STATUS: 11
 };
 
 function findStatusText(row){
-  // Scan a generous window for recognizable status wording, stopping short of the
-  // unrelated "Tiebreakers" notes column that sits further right on these rows.
-  for(let c=ECL_QUAL_COL.STATUS_START; c<=25; c++){
+  // Direct read first now that the column is a plain single cell; fall back to a
+  // short keyword scan either side in case of any residual drift.
+  const direct = cell(row, ECL_QUAL_COL.STATUS);
+  if(direct) return direct;
+  for(let c=ECL_QUAL_COL.STATUS-2; c<=ECL_QUAL_COL.STATUS+4; c++){
     const v = cell(row, c);
     if(v && /BYE|SEMI|QUARTER|FINAL|ADVANCE|ELIMINAT/i.test(v)) return v;
   }
-  // Fall back to the nominal merged range even if it didn't match a keyword.
-  return mergedCell(row, ECL_QUAL_COL.STATUS_START, ECL_QUAL_COL.STATUS_END);
+  return "";
 }
 
 function parseECLQualifiers(rows){
@@ -1680,7 +1680,7 @@ function parseECLQualifiers(rows){
   }
 
   // Always include a raw dump of the data rows so status-column drift can be diagnosed
-  // in one round-trip if the keyword scan below still comes up empty.
+  // in one round-trip if the read above still comes up empty.
   eclQualifiersDebug.rawRowDump = rows.slice(dataStartRow, dataStartRow + 6).map((row, i) =>
     "row" + (dataStartRow + i) + ": " + (row || []).map((c, ci) => `[${ci}]="${(c || "").toString().trim()}"`).join(" ")
   );
@@ -1694,8 +1694,8 @@ function parseECLQualifiers(rows){
       team: teamName,
       groupPos: cell(rows[r]||[], ECL_QUAL_COL.GROUP_POS),
       pts: cell(rows[r]||[], ECL_QUAL_COL.PTS),
-      ptsFor: mergedCell(rows[r]||[], ECL_QUAL_COL.PTS_PLUS_START, ECL_QUAL_COL.PTS_PLUS_END),
-      roddy: mergedCell(rows[r]||[], ECL_QUAL_COL.RODDY_START, ECL_QUAL_COL.RODDY_END),
+      ptsFor: cell(rows[r]||[], ECL_QUAL_COL.PTS_PLUS),
+      roddy: cell(rows[r]||[], ECL_QUAL_COL.RODDY),
       status: findStatusText(rows[r]||[])
     });
   }
@@ -1703,9 +1703,8 @@ function parseECLQualifiers(rows){
 
 function eclStatusShort(status){
   const s = (status||"").toUpperCase();
-  if(/BYE/.test(s) && /SEMI/.test(s)) return "SF BYE";
-  if(/QUARTER/.test(s)) return "QF";
   if(/SEMI/.test(s)) return "SF";
+  if(/QUARTER/.test(s)) return "QF";
   return status || "—";
 }
 
@@ -1720,7 +1719,7 @@ function eclQualifiersTableHtml(){
     </tr></thead><tbody>`;
   eclQualifiers.forEach(q=>{
     const statusUpper = (q.status||"").toUpperCase();
-    const rowClass = /BYE/.test(statusUpper) && /SEMI/.test(statusUpper) ? "ecl-sf"
+    const rowClass = /SEMI/.test(statusUpper) ? "ecl-sf"
       : /QUARTER/.test(statusUpper) ? "ecl-qf"
       : "";
     html += `<tr class="${rowClass}">
@@ -1774,6 +1773,86 @@ function eclGroupTableHtml(g){
   return html;
 }
 
+// ---------- ECL: Group stage fixtures (round-robin match results) ----------
+// Located roughly in cells AD18:AR51 — the far-right columns of each group's own row
+// block, which lines up row-for-row with that group's standings table. Detected via
+// content (MD1/MD2/MD3 labels + team-name/score patterns) rather than fixed row
+// numbers, since row offsets shift per block just like everywhere else in this sheet.
+let eclFixtures = [];
+let eclFixturesDebug = {};
+
+function parseECLFixtures(rows){
+  eclFixtures = [];
+  eclFixturesDebug = { rowsScanned: [] };
+
+  const FIX_COL_START = 26, FIX_COL_END = 44;
+
+  (eclDebug.groupHeadersFound || []).forEach(gh => {
+    const label = gh.label;
+    let currentMD = null;
+
+    for(let r=gh.row; r<gh.row+7 && r<rows.length; r++){
+      const rowArr = rows[r]||[];
+
+      // Track which matchday we're in — the MD1/MD2/MD3 label only appears on the
+      // first row of that matchday's pair of fixtures, so carry it forward.
+      for(let c=FIX_COL_START; c<=FIX_COL_END; c++){
+        const m = cell(rowArr, c).toUpperCase().match(/^MD(\d)$/);
+        if(m){ currentMD = "MD" + m[1]; break; }
+      }
+
+      const cellsInRange = [];
+      for(let c=FIX_COL_START; c<=FIX_COL_END; c++){
+        const v = cell(rowArr, c);
+        if(v) cellsInRange.push({ c, v });
+      }
+      const nonLabelCells = cellsInRange.filter(x => !/^MD\d$/i.test(x.v));
+      const teamCells = nonLabelCells.filter(x => !/^\d+$/.test(x.v));
+      const numberCells = nonLabelCells.filter(x => /^\d+$/.test(x.v));
+
+      // A fixture row has a team name, two scores, and another team name.
+      if(teamCells.length >= 2 && numberCells.length >= 2){
+        eclFixtures.push({
+          group: label,
+          matchday: currentMD || "MD?",
+          home: teamCells[0].v,
+          homeScore: parseInt(numberCells[0].v, 10),
+          away: teamCells[teamCells.length-1].v,
+          awayScore: parseInt(numberCells[1].v, 10)
+        });
+      }
+
+      eclFixturesDebug.rowsScanned.push(
+        "row" + r + " (" + label + "): " +
+        rowArr.map((c, ci) => (ci >= FIX_COL_START && ci <= FIX_COL_END && c) ? `[${ci}]="${c}"` : "").filter(Boolean).join(" ")
+      );
+    }
+  });
+}
+
+function eclFixturesHtml(){
+  if(eclFixtures.length === 0) return "";
+  const matchdays = [...new Set(eclFixtures.map(f=>f.matchday))].sort();
+  let html = `<div class="section-head" style="margin-top:32px;">
+      <h3 style="font-family:'Barlow Condensed',sans-serif;font-size:20px;margin:0;letter-spacing:0.02em;">Group Stage Fixtures</h3>
+    </div>`;
+  matchdays.forEach(md=>{
+    const mdFixtures = eclFixtures.filter(f=>f.matchday===md);
+    html += `<div style="margin-top:16px;">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;color:#ffdd00;margin-bottom:8px;letter-spacing:0.05em;">${md}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;">`;
+    mdFixtures.forEach(f=>{
+      html += `<div style="background:#1c1c1c;border:1px solid #333;border-radius:6px;padding:10px 14px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;">
+        <span style="text-align:right;font-size:13px;overflow-wrap:break-word;">${f.home}</span>
+        <span style="font-weight:700;color:#ffdd00;white-space:nowrap;">${f.homeScore} - ${f.awayScore}</span>
+        <span style="text-align:left;font-size:13px;overflow-wrap:break-word;">${f.away}</span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+  return html;
+}
+
 function renderECL(){
   const container = document.getElementById('eclContainer');
   if(eclGroups.length === 0){
@@ -1783,7 +1862,7 @@ function renderECL(){
     return;
   }
   container.className = "";
-  container.innerHTML = eclGroups.map(eclGroupTableHtml).join("") + eclQualifiersTableHtml();
+  container.innerHTML = eclGroups.map(eclGroupTableHtml).join("") + eclQualifiersTableHtml() + eclFixturesHtml();
   document.getElementById('eclUpdated').textContent = eclGroups.length + " groups";
 }
 
