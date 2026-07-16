@@ -677,12 +677,15 @@ async function load(){
       const rows = parsed.data;
 
       parseECL(rows);
+      parseECLQualifiers(rows);
       renderECL();
 
       document.getElementById('debugOut').textContent =
         "ECL groups found: " + eclGroups.length + "\n" +
         "ECL debug: " + JSON.stringify(eclDebug, null, 2) + "\n\n" +
-        JSON.stringify({groups: eclGroups.map(g=>({label:g.label, teamCount:g.teams.length, sample:g.teams.slice(0,2)}))}, null, 2);
+        "ECL qualifiers found: " + eclQualifiers.length + "\n" +
+        "ECL qualifiers debug: " + JSON.stringify(eclQualifiersDebug, null, 2) + "\n\n" +
+        JSON.stringify({groups: eclGroups.map(g=>({label:g.label, teamCount:g.teams.length, sample:g.teams.slice(0,2)})), qualifiersSample: eclQualifiers.slice(0,3)}, null, 2);
 
       setStatus("Live — updated " + new Date().toLocaleString());
     }catch(err){
@@ -1521,7 +1524,7 @@ function mergedCell(row, start, end){
 
 function parseECL(rows){
   eclGroups = [];
-  eclDebug = { groupHeadersFound: [] };
+  eclDebug = { groupHeadersFound: [], headerRowsChecked: [] };
 
   // Group header rows contain "ELIZA CHAMPIONS LEAGUE - GROUP A/B/C" — scan a few
   // leading columns since merged cells can shift the text right slightly.
@@ -1536,38 +1539,163 @@ function parseECL(rows){
   eclDebug.groupHeadersFound = groupHeaderRows;
 
   groupHeaderRows.forEach(gh => {
-    // The POS/TEAM column-header row sits within the next few rows.
+    // The POS/TEAM column-header row sits within the next few rows. Row offsets
+    // shift per-tab (see project notes), so we don't trust a fixed row/column index —
+    // scan for the literal "POS" text and detect whichever column it actually lands in.
     let headerRow = -1;
+    let posCol = ECL_COL.POS;
     for(let r=gh.row; r<gh.row+4 && r<rows.length; r++){
-      if(cell(rows[r]||[], ECL_COL.POS).toUpperCase() === "POS"){ headerRow = r; break; }
+      for(let c=0; c<=6; c++){
+        if(cell(rows[r]||[], c).toUpperCase() === "POS"){ headerRow = r; posCol = c; break; }
+      }
+      if(headerRow !== -1) break;
     }
-    if(headerRow === -1) return;
+
+    eclDebug.headerRowsChecked.push({
+      groupHeaderRow: gh.row,
+      headerRowFound: headerRow,
+      posColFound: headerRow !== -1 ? posCol : null,
+      rawRowDump: rows.slice(gh.row, gh.row + 6).map((row, i) =>
+        "row" + (gh.row + i) + ": " + (row || []).map((c, ci) => `[${ci}]="${(c || "").toString().trim()}"`).join(" ")
+      )
+    });
+
+    // Fall back to the consistent block spacing seen across groups (header row directly
+    // after the group title) if the literal "POS" text wasn't found for some reason.
+    if(headerRow === -1){ headerRow = gh.row + 1; posCol = ECL_COL.POS; }
+
+    // If POS landed in a different column than assumed, shift every other column
+    // reference by the same amount — column order itself doesn't change, just the offset.
+    const shift = posCol - ECL_COL.POS;
+    const at = (idx) => idx + shift;
 
     const teams = [];
     for(let r=headerRow+1; r<headerRow+13 && r<rows.length; r++){
-      const posRaw = cell(rows[r]||[], ECL_COL.POS);
-      const teamName = mergedCell(rows[r]||[], ECL_COL.TEAM_START, ECL_COL.TEAM_END);
+      const posRaw = cell(rows[r]||[], at(ECL_COL.POS));
+      const teamName = mergedCell(rows[r]||[], at(ECL_COL.TEAM_START), at(ECL_COL.TEAM_END));
       if(!/^\d+$/.test(posRaw) || !teamName) break; // stop once we run out of data rows
 
       teams.push({
         pos: parseInt(posRaw, 10),
         team: teamName,
-        pts: cell(rows[r]||[], ECL_COL.PTS),
-        w: cell(rows[r]||[], ECL_COL.W),
-        d: cell(rows[r]||[], ECL_COL.D),
-        l: cell(rows[r]||[], ECL_COL.L),
-        ptsFor: cell(rows[r]||[], ECL_COL.PTS_FOR),
-        ptsAgn: cell(rows[r]||[], ECL_COL.PTS_AGN),
-        diff: cell(rows[r]||[], ECL_COL.DIFF),
-        md1: cell(rows[r]||[], ECL_COL.MD1),
-        md2: cell(rows[r]||[], ECL_COL.MD2),
-        md3: cell(rows[r]||[], ECL_COL.MD3),
-        nextOpponent: mergedCell(rows[r]||[], ECL_COL.NEXTOPP_START, ECL_COL.NEXTOPP_END),
-        status: mergedCell(rows[r]||[], ECL_COL.STATUS_START, ECL_COL.STATUS_END)
+        pts: cell(rows[r]||[], at(ECL_COL.PTS)),
+        w: cell(rows[r]||[], at(ECL_COL.W)),
+        d: cell(rows[r]||[], at(ECL_COL.D)),
+        l: cell(rows[r]||[], at(ECL_COL.L)),
+        ptsFor: cell(rows[r]||[], at(ECL_COL.PTS_FOR)),
+        ptsAgn: cell(rows[r]||[], at(ECL_COL.PTS_AGN)),
+        diff: cell(rows[r]||[], at(ECL_COL.DIFF)),
+        md1: cell(rows[r]||[], at(ECL_COL.MD1)),
+        md2: cell(rows[r]||[], at(ECL_COL.MD2)),
+        md3: cell(rows[r]||[], at(ECL_COL.MD3)),
+        nextOpponent: mergedCell(rows[r]||[], at(ECL_COL.NEXTOPP_START), at(ECL_COL.NEXTOPP_END)),
+        status: mergedCell(rows[r]||[], at(ECL_COL.STATUS_START), at(ECL_COL.STATUS_END))
       });
     }
     eclGroups.push({ label: gh.label, teams });
   });
+}
+
+// ---------- ECL: Ranking of Qualified Teams (byes to Semi-Finals) ----------
+// Range B41:R48, header row 42. Columns detected by header text rather than fixed
+// indices since this table's exact layout wasn't confirmed cell-by-cell.
+let eclQualifiers = [];
+let eclQualifiersDebug = {};
+
+function parseECLQualifiers(rows){
+  eclQualifiers = [];
+  eclQualifiersDebug = {};
+
+  let titleRow = -1;
+  for(let r=0; r<rows.length; r++){
+    for(let c=0; c<=6; c++){
+      if(/RANKING OF QUALIFIED TEAMS/i.test(cell(rows[r]||[], c))){ titleRow = r; break; }
+    }
+    if(titleRow !== -1) break;
+  }
+  eclQualifiersDebug.titleRow = titleRow;
+  if(titleRow === -1) return;
+
+  let headerRow = -1;
+  for(let r=titleRow; r<=titleRow+3 && r<rows.length; r++){
+    const rowArr = rows[r]||[];
+    const hasPos = rowArr.some(c => (c||"").toString().trim().toUpperCase() === "POS");
+    const hasTeam = rowArr.some(c => (c||"").toString().trim().toUpperCase() === "TEAM");
+    if(hasPos && hasTeam){ headerRow = r; break; }
+  }
+  eclQualifiersDebug.headerRow = headerRow;
+  if(headerRow === -1){
+    eclQualifiersDebug.rawRowDump = rows.slice(titleRow, titleRow + 4).map((row, i) =>
+      "row" + (titleRow + i) + ": " + (row || []).map((c, ci) => `[${ci}]="${(c || "").toString().trim()}"`).join(" ")
+    );
+    return;
+  }
+
+  const headerArr = rows[headerRow]||[];
+  const colsWithLabel = (label) => {
+    const out = [];
+    headerArr.forEach((raw,i)=>{ if((raw||"").toString().trim().toUpperCase() === label) out.push(i); });
+    return out;
+  };
+  const posCols = colsWithLabel("POS");
+  const teamCols = colsWithLabel("TEAM");
+  const ptsCols = colsWithLabel("PTS");
+  const ptsPlusCols = [...colsWithLabel("PTS +"), ...colsWithLabel("PTS+")];
+  const roddyCols = colsWithLabel("RODDY");
+  const statusCols = colsWithLabel("STATUS");
+
+  const overallPosCol = posCols[0];
+  const groupPosCol = posCols.length > 1 ? posCols[1] : null;
+  const teamStart = teamCols[0];
+  const teamEnd = groupPosCol !== null ? groupPosCol - 1 : (ptsCols.length ? ptsCols[0] - 1 : teamStart + 3);
+  const ptsCol = ptsCols.length ? ptsCols[ptsCols.length-1] : null;
+  const ptsPlusCol = ptsPlusCols.length ? ptsPlusCols[0] : null;
+  const roddyCol = roddyCols.length ? roddyCols[0] : null;
+  const statusCol = statusCols.length ? statusCols[0] : null;
+
+  eclQualifiersDebug.cols = { overallPosCol, groupPosCol, teamStart, teamEnd, ptsCol, ptsPlusCol, roddyCol, statusCol };
+
+  if(overallPosCol === undefined || teamStart === undefined) return;
+
+  for(let r=headerRow+1; r<headerRow+9 && r<rows.length; r++){
+    const posRaw = cell(rows[r]||[], overallPosCol);
+    const teamName = mergedCell(rows[r]||[], teamStart, teamEnd);
+    if(!/^\d+$/.test(posRaw) || !teamName) break;
+    eclQualifiers.push({
+      pos: parseInt(posRaw,10),
+      team: teamName,
+      groupPos: groupPosCol !== null ? cell(rows[r]||[], groupPosCol) : "",
+      pts: ptsCol !== null ? cell(rows[r]||[], ptsCol) : "",
+      ptsFor: ptsPlusCol !== null ? cell(rows[r]||[], ptsPlusCol) : "",
+      roddy: roddyCol !== null ? cell(rows[r]||[], roddyCol) : "",
+      status: statusCol !== null ? cell(rows[r]||[], statusCol) : ""
+    });
+  }
+}
+
+function eclQualifiersTableHtml(){
+  if(eclQualifiers.length === 0) return "";
+  let html = `<div class="section-head" style="margin-top:32px;">
+      <h3 style="font-family:'Barlow Condensed',sans-serif;font-size:20px;margin:0;letter-spacing:0.02em;">Ranking of Qualified Teams</h3>
+      <span class="sub">Top 2 earn byes to the Semi-Finals</span>
+    </div>
+    <div class="table-wrap"><table class="standings compact"><thead><tr>
+      <th>Pos</th><th>Team</th><th>Grp Pos</th><th>Pts</th><th>Pts+</th><th>Roddy</th><th>Status</th>
+    </tr></thead><tbody>`;
+  eclQualifiers.forEach(q=>{
+    const isBye = /BYE/i.test(q.status);
+    html += `<tr${isBye ? ' style="background:rgba(255,221,0,0.14);border-left:4px solid #ffdd00;"' : ''}>
+      <td>${q.pos}</td>
+      <td>${q.team}</td>
+      <td>${q.groupPos || "—"}</td>
+      <td class="pts">${q.pts || "—"}</td>
+      <td>${q.ptsFor || "—"}</td>
+      <td>${q.roddy || "—"}</td>
+      <td>${q.status || "—"}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  return html;
 }
 
 function eclGroupTableHtml(g){
@@ -1611,7 +1739,7 @@ function renderECL(){
     return;
   }
   container.className = "";
-  container.innerHTML = eclGroups.map(eclGroupTableHtml).join("");
+  container.innerHTML = eclGroups.map(eclGroupTableHtml).join("") + eclQualifiersTableHtml();
   document.getElementById('eclUpdated').textContent = eclGroups.length + " groups";
 }
 
