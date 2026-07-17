@@ -295,6 +295,20 @@
   .form-pill.form-d{background:#9AA79E;}
   .form-pill.form-blank{background:#E4DFD0;color:#B0A890;}
 
+  /* Roddy chip columns (BB/UC/FH/WC) — reuse the same tint palette as the division
+     table tiers, so it feels consistent with the rest of the site. Text stays muted
+     rather than bold white, matching the existing "greyed out" look for played chips. */
+  .chip-pill{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:34px;padding:3px 6px;border-radius:4px;font-size:10.5px;font-weight:600;
+    font-family:'Barlow',sans-serif;
+  }
+  .chip-pill.chip-bb{background:#E1E9F7;color:#28427c;}
+  .chip-pill.chip-uc{background:#FFF6CC;color:#B8930A;}
+  .chip-pill.chip-fh{background:#F9E0DC;color:#A8443A;}
+  .chip-pill.chip-wc{background:#DCF2E3;color:#1F8A4C;}
+  .chip-pill.chip-blank{background:#E4DFD0;color:#B0A890;font-weight:400;}
+
   /* Fixtures */
   .round-tabs{
     display:flex;gap:6px;overflow-x:auto;padding-bottom:12px;margin-bottom:18px;
@@ -1491,7 +1505,10 @@ function renderRoddy(){
       <td>${e.round || "—"}</td>
       <td>${e.chip || "—"}</td>
       <td class="pts">${e.total}</td>
-      ${e.chips.map(c => `<td>${c || "—"}</td>`).join("")}
+      ${e.chips.map((c,i) => {
+        const chipType = ["bb","uc","fh","wc"][i];
+        return c ? `<td><span class="chip-pill chip-${chipType}">${c}</span></td>` : `<td><span class="chip-pill chip-blank">—</span></td>`;
+      }).join("")}
       <td>${e.overall}</td>
     </tr>`;
   });
@@ -2554,9 +2571,7 @@ function renderCalendar(){
     <span><span style="display:inline-block;width:11px;height:11px;background:#DCF2E3;border:1px solid #8fc46b;border-radius:2px;vertical-align:-1px;margin-right:5px;"></span>Double round</span>
   </div>`;
 
-  if(calendarRounds.footnote){
-    html += `<div style="font-family:'Barlow',sans-serif;font-size:12px;color:#6b7c73;margin-top:10px;">${calendarRounds.footnote}</div>`;
-  }
+  html += `<div style="font-family:'Barlow',sans-serif;font-size:12px;color:#6b7c73;margin-top:10px;">*All Oppo Eliza FA Cup and Eliza Champions League rounds subject to change. Rounds may be moved to avoid unplanned byes/doubles. Any changes will be announced as necessary.</div>`;
 
   container.innerHTML = html;
   document.getElementById('calendarUpdated').textContent = calendarRounds.length + " rounds";
