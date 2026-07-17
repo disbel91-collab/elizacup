@@ -736,31 +736,8 @@ async function load(){
   }
 
   if(currentDivision.type === "honour"){
-    document.getElementById('honourContainer').innerHTML = "Loading honour roll…";
-    document.getElementById('honourContainer').className = "state-msg";
-    try{
-      const res = await fetch(csvUrlFor(currentDivision));
-      if(!res.ok) throw new Error("HTTP " + res.status);
-      const csvText = await res.text();
-      const parsed = Papa.parse(csvText, {skipEmptyLines:false});
-      const rows = parsed.data;
-
-      parseHonourRoll(rows);
-      renderHonourRoll();
-
-      document.getElementById('debugOut').textContent =
-        "Honour roll seasons found: " + honourSeasons.length + "\n" +
-        "Honour roll debug: " + JSON.stringify(honourDebug, null, 2) + "\n\n" +
-        JSON.stringify(honourSeasons, null, 2);
-
-      setStatus("Live — updated " + new Date().toLocaleString());
-    }catch(err){
-      console.error(err);
-      setStatus("Couldn't reach the sheet (" + err.message + ")", false);
-      document.getElementById('honourContainer').className = "state-msg error";
-      document.getElementById('honourContainer').innerHTML =
-        "Couldn't load live data. Make sure the sheet is shared as \"Anyone with the link can view\", then hit Refresh.";
-    }
+    renderHonourRoll();
+    setStatus("Static data — last updated by hand, not pulled from the sheet");
     return;
   }
 
@@ -2019,130 +1996,148 @@ function renderECL(){
 }
 
 // ---------- Hall of Fame / Honour Roll ----------
-// Two title-anchored tables share the same 14 seasons, so they're merged into one
-// unified per-season timeline rather than shown as two separate tables. Columns are
-// located relative to a reliably-worded header cell in each table ("ELIZA CUP" /
-// "RODDY") rather than fixed indices, since exact positions drift like everywhere
-// else in this sheet — the relative spacing between columns is what's consistent.
-let honourSeasons = [];
-let honourDebug = {};
-
-function findColExact(headerRow, label){
-  for(let c=0; c<headerRow.length; c++){
-    if((headerRow[c]||"").toString().trim().toUpperCase() === label.toUpperCase()) return c;
+// This data is typed text on the sheet, but only changes once a year (a new season
+// added to the top), so it's hardcoded here rather than live-fetched. Update this
+// object directly each season rather than re-wiring a live CSV parse.
+//
+// NOTE on coverage: Eliza Cup and Roddy have the full 14-season history (2012-13 to
+// 2025-26). Shield, Division 2/3 (+ shields), FA Cup and ECL are newer competitions
+// with shorter histories — seasons below are assumed to run back-to-back with no
+// gaps from 2025-26 (or, for ECL, from the most recently *completed* season, since
+// 2025-26's ECL knockout stage isn't finished yet). Please double check the season
+// each entry lines up with — this is worth a quick sanity check against the sheet.
+const HONOUR_ROLL = {
+  "Eliza Cup": {
+    color: "#28427c",
+    winners: [
+      ["2025-26", "BC United Zebras"],
+      ["2024-25", "Zen Garden C.F"],
+      ["2023-24", "Jarvis Zebras (3rd)"],
+      ["2022-23", "Kallo FC"],
+      ["2021-22", "Futbol de Nang"],
+      ["2020-21", "Stairway to Evans (2nd)"],
+      ["2019-20", "Jarvis Zebras (2nd)"],
+      ["2018-19", "Spooners FC"],
+      ["2017-18", "Lindon-Chevella FC (1st*)"],
+      ["2016-17", "Bozza's Coke FC"],
+      ["2015-16", "Stairway to Evans"],
+      ["2014-15", "Davies Elite"],
+      ["2013-14", "Dinkin CRFC"],
+      ["2012-13", "Jarvis Zebras"]
+    ]
+  },
+  "Shield (Div 1 GF)": {
+    color: "#3a5a9c",
+    winners: [
+      ["2025-26", "Stairway to Evans (2nd)"],
+      ["2024-25", "Stairway to Evans"],
+      ["2023-24", "Kallo FC"],
+      ["2022-23", "Futbol de Nang"],
+      ["2021-22", "LJ Hooker FC"],
+      ["2020-21", "Jarvis Zebras (3rd)"],
+      ["2019-20", "Jarvis Zebras (2nd)"],
+      ["2018-19", "Zen Garden C.F"],
+      ["2017-18", "Bozza's Coke FC"],
+      ["2016-17", "Spooners FC"],
+      ["2015-16", "Jarvis Zebras"],
+      ["2014-15", "Dinkin CRFC"]
+    ]
+  },
+  "Division 2": {
+    color: "#bc3532",
+    winners: [
+      ["2025-26", "Harvey Frekes (2A - 1st), Jarvis Zebras (2B - 2nd)"],
+      ["2024-25", "DW About It FC"],
+      ["2023-24", "Give Us Wang"],
+      ["2022-23", "B.C Zebras"],
+      ["2021-22", "Jarvis Zebras"]
+    ]
+  },
+  "Div 2 Shield (GF)": {
+    color: "#d4615e",
+    winners: [
+      ["2025-26", "Inter Milanovic"],
+      ["2024-25", "Victoryrules"],
+      ["2023-24", "Tomatosauce FC"],
+      ["2022-23", "Garry Wallah United FC"]
+    ]
+  },
+  "Division 3": {
+    color: "#6aa84f",
+    winners: [
+      ["2025-26", "AFC Big Red Port (3A - 1st), The D Genreau (3B - 1st)"],
+      ["2024-25", "Heilan Coos (3A - 1st), Harbour City Heros (3B - 1st)"],
+      ["2023-24", "Frogbert Football"]
+    ]
+  },
+  "Div 3 Shield (GF)": {
+    color: "#8fc46b",
+    winners: [
+      ["2025-26", "Silverman's XI (3A - 1st), Harbour City Heros (3B - 1st)"],
+      ["2024-25", "Toby's Troops"]
+    ]
+  },
+  "Roddy": {
+    color: "#ffdd00",
+    textColor: "#3a2e00",
+    winners: [
+      ["2025-26", "Silverman's XI"],
+      ["2024-25", "Frogbert Football"],
+      ["2023-24", "BC United Zebras"],
+      ["2022-23", "Kallo FC"],
+      ["2021-22", "Futbol de Nang"],
+      ["2020-21", "Spooners FC (3rd)"],
+      ["2019-20", "Jarvis Zebras (4th)"],
+      ["2018-19", "Jarvis Zebras (3rd)"],
+      ["2017-18", "Spooners FC (2nd)"],
+      ["2016-17", "Spooners FC"],
+      ["2015-16", "Jarvis Zebras (2nd)"],
+      ["2014-15", "Davies Elite"],
+      ["2013-14", "Dinkin CRFC"],
+      ["2012-13", "Jarvis Zebras"]
+    ]
+  },
+  "FA Cup": {
+    color: "#0a2f85",
+    winners: [
+      ["2025-26", "Jarvis Zebras"],
+      ["2024-25", "Zen Garden C.F"],
+      ["2023-24", "Casual Approach"],
+      ["2022-23", "Stairway to Evans"],
+      ["2021-22", "Spooners FC"]
+    ]
+  },
+  "ECL": {
+    color: "#111111",
+    winners: [
+      ["2024-25", "Sauce FC"],
+      ["2023-24", "Nanistate"],
+      ["2022-23", "Dinkin CRFC"]
+    ]
   }
-  return -1;
-}
+};
 
-function parseHonourRoll(rows){
-  honourSeasons = [];
-  honourDebug = { table1TitleRow: -1, table2TitleRow: -1, table1HeaderRow: -1, table2HeaderRow: -1, table1ElizaCupCol: -1, table2RoddyCol: -1 };
+function honourCompetitionSectionHtml(name, comp){
+  const fg = comp.textColor || "#fff";
+  const rows = comp.winners.map(([season, winner]) => `
+    <div style="display:grid;grid-template-columns:90px 1fr;gap:14px;padding:8px 0;border-bottom:1px solid var(--line-light);">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:#6b7c73;">${season}</span>
+      <span style="font-size:14px;font-weight:600;">${winner}</span>
+    </div>`).join("");
 
-  const seasonMap = {}; // year -> season object
-
-  // Always include a raw dump of the first ~40 rows (all non-empty cells) so the real
-  // structure is visible for diagnosis if detection below doesn't land correctly —
-  // same approach that worked for the ECL tables.
-  honourDebug.rawRowDump = rows.slice(0, 40).map((row, r) =>
-    "row" + r + ": " + (row || []).map((c, ci) => c ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
-  );
-
-  // ---- Table 1: Head to Head Title Winners (Eliza Cup, Shield, Div 2/3 + shields) ----
-  let t1Title = -1;
-  for(let r=0; r<rows.length; r++){
-    for(let c=0; c<=3; c++){
-      if(/HEAD TO HEAD TITLE WINNERS/i.test(cell(rows[r]||[], c))){ t1Title = r; break; }
-    }
-    if(t1Title !== -1) break;
-  }
-  honourDebug.table1TitleRow = t1Title;
-
-  if(t1Title !== -1){
-    let headerRow = -1, elizaCupCol = -1;
-    for(let r=t1Title; r<t1Title+6 && r<rows.length; r++){
-      const c = findColExact(rows[r]||[], "ELIZA CUP");
-      if(c !== -1){ headerRow = r; elizaCupCol = c; break; }
-    }
-    honourDebug.table1HeaderRow = headerRow;
-    honourDebug.table1ElizaCupCol = elizaCupCol;
-
-    if(headerRow !== -1){
-      // Relative offsets from the "ELIZA CUP" column, per the sheet's fixed layout (C9:N23):
-      // YEAR, ELIZA CUP, SHIELD, [blank], DIV2, [blank], DIV2 SHIELD, [blank], DIV3, [blank], DIV3 SHIELD, NOTES
-      const col = {
-        year: elizaCupCol - 1,
-        elizaCup: elizaCupCol,
-        shield: elizaCupCol + 1,
-        division2: elizaCupCol + 3,
-        div2Shield: elizaCupCol + 5,
-        division3: elizaCupCol + 7,
-        div3Shield: elizaCupCol + 9,
-        notes: elizaCupCol + 10
-      };
-      for(let r=headerRow+1; r<headerRow+20 && r<rows.length; r++){
-        const year = cell(rows[r]||[], col.year);
-        if(!/^\d{4}-\d{2,4}$/.test(year)) break;
-        seasonMap[year] = seasonMap[year] || { year, notes: [] };
-        const s = seasonMap[year];
-        s.elizaCup = cell(rows[r]||[], col.elizaCup);
-        s.shield = cell(rows[r]||[], col.shield);
-        s.division2 = cell(rows[r]||[], col.division2);
-        s.div2Shield = cell(rows[r]||[], col.div2Shield);
-        s.division3 = cell(rows[r]||[], col.division3);
-        s.div3Shield = cell(rows[r]||[], col.div3Shield);
-        const n1 = cell(rows[r]||[], col.notes);
-        if(n1) s.notes.push(n1);
-      }
-    }
-  }
-
-  honourSeasons = Object.values(seasonMap).sort((a,b) => b.year.localeCompare(a.year));
-}
-
-function honourBadge(label, value, bg, fg){
-  if(!value) return "";
-  return `<div style="display:flex;align-items:center;gap:8px;background:${bg};color:${fg};border-radius:5px;padding:7px 11px;">
-    <span style="font-family:'Barlow Condensed',sans-serif;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.75;min-width:64px;">${label}</span>
-    <span style="font-size:13px;font-weight:600;">${value}</span>
-  </div>`;
-}
-
-function honourSeasonCardHtml(s){
-  const badges = [
-    honourBadge("Eliza Cup", s.elizaCup, "#28427c", "#fff"),
-    honourBadge("Shield", s.shield, "#3a5a9c", "#fff"),
-    honourBadge("Division 2", s.division2, "#bc3532", "#fff"),
-    honourBadge("Div 2 Shield", s.div2Shield, "#d4615e", "#fff"),
-    honourBadge("Division 3", s.division3, "#6aa84f", "#fff"),
-    honourBadge("Div 3 Shield", s.div3Shield, "#8fc46b", "#12321a"),
-    honourBadge("Roddy", s.roddy, "#ffdd00", "#3a2e00"),
-    honourBadge("FA Cup", s.faCup, "#0a2f85", "#fff"),
-    honourBadge("ECL", s.ecl, "#111111", "#fff")
-  ].filter(Boolean).join("");
-
-  const notesHtml = s.notes && s.notes.length
-    ? `<div style="margin-top:10px;font-size:12px;color:#6b7c73;font-style:italic;">${s.notes.join(" · ")}</div>`
-    : "";
-
-  return `<div style="border-left:3px solid #8B6914;padding:4px 0 4px 18px;margin-bottom:22px;position:relative;">
-    <div style="position:absolute;left:-7px;top:9px;width:11px;height:11px;border-radius:50%;background:#8B6914;"></div>
-    <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;margin-bottom:8px;">${s.year}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;">${badges}</div>
-    ${notesHtml}
+  return `<div style="margin-bottom:32px;break-inside:avoid;">
+    <div style="display:inline-block;background:${comp.color};color:${fg};font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;padding:6px 14px;border-radius:4px;margin-bottom:6px;">${name}</div>
+    <div>${rows}</div>
   </div>`;
 }
 
 function renderHonourRoll(){
   const container = document.getElementById('honourContainer');
-  if(honourSeasons.length === 0){
-    container.className = "state-msg error";
-    container.innerHTML = "Couldn't find the honour roll tables. Check the Debug panel below.";
-    document.getElementById('honourUpdated').textContent = "";
-    return;
-  }
   container.className = "";
-  container.innerHTML = `<div style="max-width:640px;">` + honourSeasons.map(honourSeasonCardHtml).join("") + `</div>`;
-  document.getElementById('honourUpdated').textContent = honourSeasons.length + " seasons";
+  container.innerHTML = `<div style="columns:2;column-gap:36px;max-width:820px;">` +
+    Object.entries(HONOUR_ROLL).map(([name, comp]) => honourCompetitionSectionHtml(name, comp)).join("") +
+    `</div>`;
+  document.getElementById('honourUpdated').textContent = "";
 }
 
 function renderFACup(){
