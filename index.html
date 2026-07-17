@@ -241,6 +241,12 @@
   table.standings tbody tr.ecl-elim{background:#F9E0DC;}
   table.standings tbody tr.ecl-elim:nth-child(even){background:#F5D1CB;}
   table.standings tbody tr.ecl-elim td:first-child{color:#A8443A;}
+
+  /* Calendar: bye rounds (red) and double rounds (green) */
+  table.calendar-table tbody tr.cal-bye{background:#F9E0DC;}
+  table.calendar-table tbody tr.cal-bye td:first-child{color:#A8443A;font-weight:700;}
+  table.calendar-table tbody tr.cal-double{background:#DCF2E3;}
+  table.calendar-table tbody tr.cal-double td:first-child{color:#1F8A4C;font-weight:700;}
   td.pts{font-weight:700;color:var(--pitch-2);}
   td.diff-pos{color:var(--turf);font-weight:600;}
   td.diff-neg{color:var(--red);font-weight:600;}
@@ -495,6 +501,14 @@
     <div id="homeContainer"></div>
   </section>
 
+  <section id="calendarSection" style="display:none;">
+    <div class="section-head">
+      <h2>Calendar</h2>
+      <span class="sub" id="calendarUpdated"></span>
+    </div>
+    <div id="calendarContainer" class="state-msg">Loading calendar…</div>
+  </section>
+
   <section id="tableSection">
     <div class="section-head">
       <h2>League Table</h2>
@@ -582,6 +596,7 @@ const SHEET_ID = "1pkSwNM4KpkFJ9MM1Pja2sOPrvZA9TKxI8tZJLigyKsY";
 
 const DIVISIONS = [
   { id: "home", label: "Home",                    pill: "Home",    gid: null,         teams: 0,  color: "#28427c", type: "home" },
+  { id: "calendar", label: "Calendar",            pill: "Calendar", gid: "2066314959", teams: 0, color: "#28427c", type: "calendar" },
   { id: "d1",  label: "Division 1 (Eliza Cup)", pill: "Div. 1",  gid: "1124941542", teams: 14, color: "#28427c", type: "division" },
   { id: "d2a", label: "Division 2A",            pill: "Div. 2A", gid: "919912875",  teams: 12, color: "#bc3532", type: "division" },
   { id: "d2b", label: "Division 2B",            pill: "Div. 2B", gid: "1047201294", teams: 12, color: "#990000", type: "division" },
@@ -673,7 +688,9 @@ function togglePageSections(){
   const isECL = type === "ecl";
   const isHonour = type === "honour";
   const isHome = type === "home";
+  const isCalendar = type === "calendar";
   document.getElementById('homeSection').style.display = isHome ? "" : "none";
+  document.getElementById('calendarSection').style.display = isCalendar ? "" : "none";
   document.getElementById('tableSection').style.display = isDivision ? "" : "none";
   document.getElementById('fixturesSection').style.display = isDivision ? "" : "none";
   document.getElementById('h2hSection').style.display = isDivision ? "" : "none";
@@ -694,6 +711,35 @@ async function load(){
   }
 
   setStatus("Connecting to live sheet…");
+
+  if(currentDivision.type === "calendar"){
+    document.getElementById('calendarContainer').innerHTML = "Loading calendar…";
+    document.getElementById('calendarContainer').className = "state-msg";
+    try{
+      const res = await fetch(csvUrlFor(currentDivision));
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      const csvText = await res.text();
+      const parsed = Papa.parse(csvText, {skipEmptyLines:false});
+      const rows = parsed.data;
+
+      parseCalendar(rows);
+      renderCalendar();
+
+      document.getElementById('debugOut').textContent =
+        "Calendar rounds found: " + calendarRounds.length + "\n" +
+        "Calendar debug: " + JSON.stringify(calendarDebug, null, 2) + "\n\n" +
+        JSON.stringify(calendarRounds, null, 2);
+
+      setStatus("Live — updated " + new Date().toLocaleString());
+    }catch(err){
+      console.error(err);
+      setStatus("Couldn't reach the sheet (" + err.message + ")", false);
+      document.getElementById('calendarContainer').className = "state-msg error";
+      document.getElementById('calendarContainer').innerHTML =
+        "Couldn't load live data. Make sure the sheet is shared as \"Anyone with the link can view\", then hit Refresh.";
+    }
+    return;
+  }
 
   if(currentDivision.type === "roddy"){
     document.getElementById('roddyContainer').innerHTML = "Loading leaderboard…";
@@ -2373,6 +2419,108 @@ function renderHonourRoll(){
   tabsEl.firstChild.classList.add('active');
   renderHonourCompetition(names[0]);
   document.getElementById('honourUpdated').textContent = "";
+}
+
+// ---------- Calendar ----------
+// Cells B7:O34. Header row 7: ROUND=B(1), DATE=D(3), ELIZA CUP=F(5), DIVISION 2=H(7),
+// DIVISION 3=J(9), FA CUP=L(11), ECL=N(13) — each merged across 2 columns.
+// Bye rounds (5, 6) and double rounds (12, 16) are called out per instruction rather
+// than detected from cell color, since background fills don't survive CSV export.
+const CAL_COL = { ROUND: 1, DATE: 3, ELIZA_CUP: 5, DIV2: 7, DIV3: 9, FA_CUP: 11, ECL: 13 };
+const BYE_ROUNDS = [5, 6];
+const DOUBLE_ROUNDS = [12, 16];
+
+let calendarRounds = [];
+let calendarDebug = {};
+
+function parseCalendar(rows){
+  calendarRounds = [];
+  calendarDebug = {};
+
+  let headerRow = -1;
+  for(let r=0; r<rows.length; r++){
+    if(cell(rows[r]||[], CAL_COL.ROUND).toUpperCase() === "ROUND"){ headerRow = r; break; }
+  }
+  calendarDebug.headerRow = headerRow;
+
+  if(headerRow === -1){
+    calendarDebug.rawRowDump = rows.slice(0, 15).map((row, r) =>
+      "row" + r + ": " + (row || []).map((c, ci) => c ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
+    );
+    return;
+  }
+
+  let footnote = "";
+  for(let r=headerRow+1; r<headerRow+35 && r<rows.length; r++){
+    const roundRaw = cell(rows[r]||[], CAL_COL.ROUND);
+    if(!/^\d+$/.test(roundRaw)){
+      // First non-numeric row after the data block is the footnote.
+      if(!footnote){
+        const rowArr = rows[r]||[];
+        footnote = rowArr.map(c=>(c||"").toString().trim()).find(v=>v.length > 20) || "";
+      }
+      if(roundRaw) continue; else break;
+    }
+    calendarRounds.push({
+      round: parseInt(roundRaw, 10),
+      date: cell(rows[r]||[], CAL_COL.DATE),
+      elizaCup: cell(rows[r]||[], CAL_COL.ELIZA_CUP),
+      div2: cell(rows[r]||[], CAL_COL.DIV2),
+      div3: cell(rows[r]||[], CAL_COL.DIV3),
+      faCup: cell(rows[r]||[], CAL_COL.FA_CUP),
+      ecl: cell(rows[r]||[], CAL_COL.ECL)
+    });
+  }
+  calendarDebug.footnote = footnote;
+  calendarRounds.footnote = footnote;
+}
+
+const CAL_COMP_COLORS = [
+  { key: "elizaCup", label: "Eliza Cup",  bg: "#28427c", fg: "#fff" },
+  { key: "div2",     label: "Division 2", bg: "#bc3532", fg: "#fff" },
+  { key: "div3",     label: "Division 3", bg: "#6aa84f", fg: "#fff" },
+  { key: "faCup",    label: "FA Cup*",    bg: "#0a2f85", fg: "#fff" },
+  { key: "ecl",      label: "ECL*",       bg: "#111111", fg: "#fff" }
+];
+
+function renderCalendar(){
+  const container = document.getElementById('calendarContainer');
+  if(calendarRounds.length === 0){
+    container.className = "state-msg error";
+    container.innerHTML = "Couldn't find the calendar. Check the Debug panel below.";
+    document.getElementById('calendarUpdated').textContent = "";
+    return;
+  }
+  container.className = "";
+
+  let html = `<div class="table-wrap"><table class="standings compact calendar-table"><thead><tr>
+    <th>Round</th><th>Date</th>
+    ${CAL_COMP_COLORS.map(c=>`<th style="background:${c.bg};color:${c.fg};">${c.label}</th>`).join("")}
+  </tr></thead><tbody>`;
+
+  calendarRounds.forEach(r=>{
+    const isBye = BYE_ROUNDS.includes(r.round);
+    const isDouble = DOUBLE_ROUNDS.includes(r.round);
+    const rowClass = isBye ? "cal-bye" : isDouble ? "cal-double" : "";
+    html += `<tr class="${rowClass}">
+      <td class="pts">${r.round}</td>
+      <td class="next-opp">${r.date || "—"}</td>
+      ${CAL_COMP_COLORS.map(c => `<td>${r[c.key] || "—"}</td>`).join("")}
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+
+  html += `<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-family:'Barlow',sans-serif;font-size:12px;color:#6b7c73;">
+    <span><span style="display:inline-block;width:11px;height:11px;background:#F9E0DC;border:1px solid #d99a90;border-radius:2px;vertical-align:-1px;margin-right:5px;"></span>Bye round</span>
+    <span><span style="display:inline-block;width:11px;height:11px;background:#DCF2E3;border:1px solid #8fc46b;border-radius:2px;vertical-align:-1px;margin-right:5px;"></span>Double round</span>
+  </div>`;
+
+  if(calendarRounds.footnote){
+    html += `<div style="font-family:'Barlow',sans-serif;font-size:12px;color:#6b7c73;margin-top:10px;">${calendarRounds.footnote}</div>`;
+  }
+
+  container.innerHTML = html;
+  document.getElementById('calendarUpdated').textContent = calendarRounds.length + " rounds";
 }
 
 // ---------- Home page ----------
