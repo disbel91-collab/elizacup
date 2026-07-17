@@ -2650,8 +2650,12 @@ function homeSnapshotHtml(){
   for(let i=rounds.length-1; i>=0; i--){
     if(fixturesByRound[rounds[i]].some(f => f.homeScore !== null && f.awayScore !== null)){ lastScoredRound = rounds[i]; break; }
   }
+  const seasonComplete = rounds.length > 0 && rounds.every(r =>
+    fixturesByRound[r].every(f => f.homeScore !== null && f.awayScore !== null)
+  );
+  const resultsLabel = seasonComplete ? `Final Round (${lastScoredRound}) Results` : `Round ${lastScoredRound} results`;
   const resultsHtml = lastScoredRound ? `
-    <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;margin:14px 0 6px;">Round ${lastScoredRound} results</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;margin:14px 0 6px;">${resultsLabel}</div>
     <div style="display:flex;flex-direction:column;gap:4px;">
       ${fixturesByRound[lastScoredRound].filter(f=>f.homeScore!==null && f.awayScore!==null).map(f=>
         `<div style="font-family:'Barlow',sans-serif;font-size:13px;">${f.home} <b>${f.homeScore}</b> – <b>${f.awayScore}</b> ${f.away}</div>`
@@ -2659,13 +2663,24 @@ function homeSnapshotHtml(){
     </div>` : `<p style="font-family:'Barlow',sans-serif;font-size:13px;color:#6b7c73;margin-top:14px;">No results yet — season hasn't started.</p>`;
 
   const nextRound = rounds.find(r => fixturesByRound[r].every(f => f.homeScore === null && f.awayScore === null));
-  const nextHtml = nextRound ? `
+  let nextHtml = "";
+  if(nextRound){
+    nextHtml = `
     <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;margin:14px 0 6px;">Round ${nextRound} fixtures</div>
     <div style="display:flex;flex-direction:column;gap:4px;">
       ${fixturesByRound[nextRound].map(f=>
         `<div style="font-family:'Barlow',sans-serif;font-size:13px;">${f.home} <span style="color:#6b7c73;">vs</span> ${f.away}</div>`
       ).join("")}
-    </div>` : "";
+    </div>`;
+  } else if(seasonComplete && standings.length){
+    const champion = standings[0].team;
+    nextHtml = `
+    <div style="margin-top:16px;padding:14px 16px;background:#F5F0DC;border:1px solid #E0D5A8;border-radius:6px;">
+      <div style="font-family:'Barlow',sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#8B6914;margin-bottom:4px;">Season Complete</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;">${champion} win Division 1</div>
+      <a href="#honour" style="display:inline-block;margin-top:8px;font-family:'Barlow',sans-serif;font-size:12.5px;color:#28427c;font-weight:600;text-decoration:none;">See the full Hall of Fame →</a>
+    </div>`;
+  }
 
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;">
     <div>${top3Html}</div>
