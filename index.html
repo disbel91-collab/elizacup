@@ -2067,8 +2067,8 @@ function parseHonourRoll(rows){
     honourDebug.table1ElizaCupCol = elizaCupCol;
 
     if(headerRow !== -1){
-      // Relative offsets from the "ELIZA CUP" column, per the sheet's fixed layout:
-      // YEAR, ELIZA CUP, SHIELD, [blank], DIV2, [blank], DIV2 SHIELD, [blank], DIV3, [blank], DIV3 SHIELD, [blank], NOTES
+      // Relative offsets from the "ELIZA CUP" column, per the sheet's fixed layout (C9:N23):
+      // YEAR, ELIZA CUP, SHIELD, [blank], DIV2, [blank], DIV2 SHIELD, [blank], DIV3, [blank], DIV3 SHIELD, NOTES
       const col = {
         year: elizaCupCol - 1,
         elizaCup: elizaCupCol,
@@ -2077,7 +2077,7 @@ function parseHonourRoll(rows){
         div2Shield: elizaCupCol + 5,
         division3: elizaCupCol + 7,
         div3Shield: elizaCupCol + 9,
-        notes: elizaCupCol + 11
+        notes: elizaCupCol + 10
       };
       for(let r=headerRow+1; r<headerRow+20 && r<rows.length; r++){
         const year = cell(rows[r]||[], col.year);
@@ -2092,48 +2092,6 @@ function parseHonourRoll(rows){
         s.div3Shield = cell(rows[r]||[], col.div3Shield);
         const n1 = cell(rows[r]||[], col.notes);
         if(n1) s.notes.push(n1);
-      }
-    }
-  }
-
-  // ---- Table 2: Roddy, FA Cup & ECL Title Winners ----
-  let t2Title = -1;
-  for(let r=0; r<rows.length; r++){
-    for(let c=0; c<=3; c++){
-      if(/RODDY.*FA CUP.*ELIZA CHAMPIONS LEAGUE/i.test(cell(rows[r]||[], c))){ t2Title = r; break; }
-    }
-    if(t2Title !== -1) break;
-  }
-  honourDebug.table2TitleRow = t2Title;
-
-  if(t2Title !== -1){
-    let headerRow = -1, roddyCol = -1;
-    for(let r=t2Title; r<t2Title+6 && r<rows.length; r++){
-      const c = findColExact(rows[r]||[], "RODDY");
-      if(c !== -1){ headerRow = r; roddyCol = c; break; }
-    }
-    honourDebug.table2HeaderRow = headerRow;
-    honourDebug.table2RoddyCol = roddyCol;
-
-    if(headerRow !== -1){
-      // YEAR, RODDY, FA CUP, [blank], ECL, [blank], NOTES
-      const col = {
-        year: roddyCol - 1,
-        roddy: roddyCol,
-        faCup: roddyCol + 1,
-        ecl: roddyCol + 3,
-        notes: roddyCol + 5
-      };
-      for(let r=headerRow+1; r<headerRow+20 && r<rows.length; r++){
-        const year = cell(rows[r]||[], col.year);
-        if(!/^\d{4}-\d{2,4}$/.test(year)) break;
-        seasonMap[year] = seasonMap[year] || { year, notes: [] };
-        const s = seasonMap[year];
-        s.roddy = cell(rows[r]||[], col.roddy);
-        s.faCup = cell(rows[r]||[], col.faCup);
-        s.ecl = cell(rows[r]||[], col.ecl);
-        const n2 = cell(rows[r]||[], col.notes);
-        if(n2) s.notes.push(n2);
       }
     }
   }
