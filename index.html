@@ -2227,37 +2227,53 @@ function parseTrophyLeaders(rows){
   trophyLeaders = [];
   trophyDebug = {};
 
-  let titleRow = -1;
+  // Primary anchor: the header row where RODDY and FA CUP columns sit next to each
+  // other — more reliable than the section title text, which isn't consistently
+  // present in the CSV export (it's moved/disappeared before).
+  let headerRow = -1;
   for(let r=0; r<rows.length; r++){
-    for(let c=15; c<=32; c++){
-      if(/ELIZA CUP TROPHY WINNERS TOTAL/i.test(cell(rows[r]||[], c))){ titleRow = r; break; }
+    if(cell(rows[r]||[], TCOL.RODDY).toUpperCase() === "RODDY" && cell(rows[r]||[], TCOL.FA_CUP).toUpperCase() === "FA CUP"){
+      headerRow = r; break;
     }
-    if(titleRow !== -1) break;
   }
-  trophyDebug.titleRow = titleRow;
+  trophyDebug.headerRow = headerRow;
 
-  if(titleRow === -1){
+  // Fallback: the old title text, in case the header labels ever move too.
+  if(headerRow === -1){
+    let titleRow = -1;
+    for(let r=0; r<rows.length; r++){
+      for(let c=15; c<=32; c++){
+        if(/ELIZA CUP TROPHY WINNERS TOTAL/i.test(cell(rows[r]||[], c))){ titleRow = r; break; }
+      }
+      if(titleRow !== -1) break;
+    }
+    trophyDebug.titleRow = titleRow;
+    if(titleRow !== -1) headerRow = titleRow;
+  }
+
+  if(headerRow === -1){
     trophyDebug.rawRowDump = rows.slice(0, 10).map((row, r) =>
       "row" + r + ": " + (row || []).map((c, ci) => c ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
     );
     return;
   }
 
-  for(let r=titleRow+1; r<titleRow+40 && r<rows.length; r++){
+  for(let r=headerRow+1; r<headerRow+40 && r<rows.length; r++){
     const team = cell(rows[r]||[], TCOL.TEAM);
     if(!team) break;
+    const clean = v => (v === "-" ? "" : v);
     trophyLeaders.push({
       team,
-      total: cell(rows[r]||[], TCOL.TOTAL),
-      elizaCup: cell(rows[r]||[], TCOL.ELIZA_CUP),
-      elizaShield: cell(rows[r]||[], TCOL.ELIZA_SHIELD),
-      roddy: cell(rows[r]||[], TCOL.RODDY),
-      faCup: cell(rows[r]||[], TCOL.FA_CUP),
-      decl: cell(rows[r]||[], TCOL.DECL),
-      div2: cell(rows[r]||[], TCOL.DIV2),
-      div2Shield: cell(rows[r]||[], TCOL.DIV2_SHIELD),
-      div3: cell(rows[r]||[], TCOL.DIV3),
-      div3Shield: cell(rows[r]||[], TCOL.DIV3_SHIELD),
+      total: clean(cell(rows[r]||[], TCOL.TOTAL)),
+      elizaCup: clean(cell(rows[r]||[], TCOL.ELIZA_CUP)),
+      elizaShield: clean(cell(rows[r]||[], TCOL.ELIZA_SHIELD)),
+      roddy: clean(cell(rows[r]||[], TCOL.RODDY)),
+      faCup: clean(cell(rows[r]||[], TCOL.FA_CUP)),
+      decl: clean(cell(rows[r]||[], TCOL.DECL)),
+      div2: clean(cell(rows[r]||[], TCOL.DIV2)),
+      div2Shield: clean(cell(rows[r]||[], TCOL.DIV2_SHIELD)),
+      div3: clean(cell(rows[r]||[], TCOL.DIV3)),
+      div3Shield: clean(cell(rows[r]||[], TCOL.DIV3_SHIELD)),
       notes: cell(rows[r]||[], TCOL.NOTES)
     });
   }
