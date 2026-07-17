@@ -510,6 +510,7 @@
       <h2>Hall of Fame</h2>
       <span class="sub" id="honourUpdated"></span>
     </div>
+    <div id="honourTabs" class="round-tabs"></div>
     <div id="honourContainer" class="state-msg">Loading honour roll…</div>
   </section>
 </main>
@@ -2010,56 +2011,56 @@ const HONOUR_ROLL = {
   "Eliza Cup": {
     color: "#28427c",
     winners: [
-      ["2025-26", "BC United Zebras"],
-      ["2024-25", "Zen Garden C.F"],
+      ["2025-26", "BC United Zebras (1st)"],
+      ["2024-25", "Zen Garden C.F (1st)"],
       ["2023-24", "Jarvis Zebras (3rd)"],
-      ["2022-23", "Kallo FC"],
-      ["2021-22", "Futbol de Nang"],
+      ["2022-23", "Kallo FC (1st)"],
+      ["2021-22", "Futbol de Nang (1st)"],
       ["2020-21", "Stairway to Evans (2nd)"],
       ["2019-20", "Jarvis Zebras (2nd)"],
-      ["2018-19", "Spooners FC"],
+      ["2018-19", "Spooners FC (1st)"],
       ["2017-18", "Lindon-Chevella FC (1st*)"],
-      ["2016-17", "Bozza's Coke FC"],
-      ["2015-16", "Stairway to Evans"],
-      ["2014-15", "Davies Elite"],
-      ["2013-14", "Dinkin CRFC"],
-      ["2012-13", "Jarvis Zebras"]
+      ["2016-17", "Bozza's Coke FC (1st)"],
+      ["2015-16", "Stairway to Evans (1st)"],
+      ["2014-15", "Davies Elite (1st)"],
+      ["2013-14", "Dinkin CRFC (1st)"],
+      ["2012-13", "Jarvis Zebras (1st)"]
     ]
   },
   "Shield (Div 1 GF)": {
     color: "#3a5a9c",
     winners: [
-      ["2025-26", "Stairway to Evans (2nd)"],
-      ["2024-25", "Stairway to Evans"],
-      ["2023-24", "Kallo FC"],
-      ["2022-23", "Futbol de Nang"],
-      ["2021-22", "LJ Hooker FC"],
-      ["2020-21", "Jarvis Zebras (3rd)"],
-      ["2019-20", "Jarvis Zebras (2nd)"],
-      ["2018-19", "Zen Garden C.F"],
-      ["2017-18", "Bozza's Coke FC"],
-      ["2016-17", "Spooners FC"],
-      ["2015-16", "Jarvis Zebras"],
-      ["2014-15", "Dinkin CRFC"]
+      ["2024-25", "Stairway to Evans (2nd)"],
+      ["2023-24", "Stairway to Evans (1st)"],
+      ["2022-23", "Kallo FC (1st)"],
+      ["2021-22", "Futbol de Nang (1st)"],
+      ["2020-21", "LJ Hooker FC (1st)"],
+      ["2019-20", "Jarvis Zebras (3rd)"],
+      ["2018-19", "Jarvis Zebras (2nd)"],
+      ["2017-18", "Zen Garden C.F (1st)"],
+      ["2016-17", "Bozza's Coke FC (1st)"],
+      ["2015-16", "Spooners FC (1st)"],
+      ["2014-15", "Jarvis Zebras (1st)"],
+      ["2013-14", "Dinkin CRFC (1st)"]
     ]
   },
   "Division 2": {
     color: "#bc3532",
     winners: [
       ["2025-26", "Harvey Frekes (2A - 1st), Jarvis Zebras (2B - 2nd)"],
-      ["2024-25", "DW About It FC"],
-      ["2023-24", "Give Us Wang"],
-      ["2022-23", "B.C Zebras"],
-      ["2021-22", "Jarvis Zebras"]
+      ["2024-25", "DW About It FC (1st)"],
+      ["2023-24", "Give Us Wang (1st)"],
+      ["2022-23", "B.C Zebras (1st)"],
+      ["2021-22", "Jarvis Zebras (1st)"]
     ]
   },
   "Div 2 Shield (GF)": {
     color: "#d4615e",
     winners: [
-      ["2025-26", "Inter Milanovic"],
-      ["2024-25", "Victoryrules"],
-      ["2023-24", "Tomatosauce FC"],
-      ["2022-23", "Garry Wallah United FC"]
+      ["2024-25", "Inter Milanovic (1st)"],
+      ["2023-24", "Victoryrules (1st)"],
+      ["2022-23", "Tomatosauce FC (1st)"],
+      ["2021-22", "Garry Wallah United FC (1st)"]
     ]
   },
   "Division 3": {
@@ -2067,76 +2068,89 @@ const HONOUR_ROLL = {
     winners: [
       ["2025-26", "AFC Big Red Port (3A - 1st), The D Genreau (3B - 1st)"],
       ["2024-25", "Heilan Coos (3A - 1st), Harbour City Heros (3B - 1st)"],
-      ["2023-24", "Frogbert Football"]
+      ["2023-24", "Frogbert Football (1st)"]
     ]
   },
   "Div 3 Shield (GF)": {
     color: "#8fc46b",
     winners: [
-      ["2025-26", "Silverman's XI (3A - 1st), Harbour City Heros (3B - 1st)"],
-      ["2024-25", "Toby's Troops"]
+      ["2024-25", "Silverman's XI (3A - 1st), Harbour City Heros (3B - 1st)"],
+      ["2023-24", "Toby's Troops (1st)"]
     ]
   },
   "Roddy": {
     color: "#ffdd00",
     textColor: "#3a2e00",
     winners: [
-      ["2025-26", "Silverman's XI"],
-      ["2024-25", "Frogbert Football"],
-      ["2023-24", "BC United Zebras"],
-      ["2022-23", "Kallo FC"],
-      ["2021-22", "Futbol de Nang"],
+      ["2025-26", "Silverman's XI (1st)"],
+      ["2024-25", "Frogbert Football (1st)"],
+      ["2023-24", "BC United Zebras (1st)"],
+      ["2022-23", "Kallo FC (1st)"],
+      ["2021-22", "Futbol de Nang (1st)"],
       ["2020-21", "Spooners FC (3rd)"],
       ["2019-20", "Jarvis Zebras (4th)"],
       ["2018-19", "Jarvis Zebras (3rd)"],
       ["2017-18", "Spooners FC (2nd)"],
-      ["2016-17", "Spooners FC"],
+      ["2016-17", "Spooners FC (1st)"],
       ["2015-16", "Jarvis Zebras (2nd)"],
-      ["2014-15", "Davies Elite"],
-      ["2013-14", "Dinkin CRFC"],
-      ["2012-13", "Jarvis Zebras"]
+      ["2014-15", "Davies Elite (1st)"],
+      ["2013-14", "Dinkin CRFC (1st)"],
+      ["2012-13", "Jarvis Zebras (1st)"]
     ]
   },
   "FA Cup": {
     color: "#0a2f85",
     winners: [
-      ["2025-26", "Jarvis Zebras"],
-      ["2024-25", "Zen Garden C.F"],
-      ["2023-24", "Casual Approach"],
-      ["2022-23", "Stairway to Evans"],
-      ["2021-22", "Spooners FC"]
+      ["2025-26", "Jarvis Zebras (1st)"],
+      ["2024-25", "Zen Garden C.F (1st)"],
+      ["2023-24", "Casual Approach (1st)"],
+      ["2022-23", "Stairway to Evans (1st)"],
+      ["2021-22", "Spooners FC (1st)"]
     ]
   },
   "ECL": {
     color: "#111111",
     winners: [
-      ["2024-25", "Sauce FC"],
-      ["2023-24", "Nanistate"],
-      ["2022-23", "Dinkin CRFC"]
+      ["2025-26", "Sauce FC (1st)"],
+      ["2024-25", "Nanistate (1st)"],
+      ["2023-24", "Dinkin CRFC (1st)"]
     ]
   }
 };
 
-function honourCompetitionSectionHtml(name, comp){
+function honourCompetitionHtml(name, comp){
   const fg = comp.textColor || "#fff";
   const rows = comp.winners.map(([season, winner]) => `
-    <div style="display:grid;grid-template-columns:90px 1fr;gap:14px;padding:8px 0;border-bottom:1px solid var(--line-light);">
-      <span style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:#6b7c73;">${season}</span>
-      <span style="font-size:14px;font-weight:600;">${winner}</span>
+    <div style="display:grid;grid-template-columns:90px 1fr;gap:14px;padding:10px 0;border-bottom:1px solid var(--line-light);">
+      <span style="font-family:'Barlow Condensed',sans-serif;font-size:14px;color:#6b7c73;">${season}</span>
+      <span style="font-size:15px;font-weight:600;">${winner}</span>
     </div>`).join("");
 
-  return `<div style="margin-bottom:32px;break-inside:avoid;">
-    <div style="display:inline-block;background:${comp.color};color:${fg};font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;padding:6px 14px;border-radius:4px;margin-bottom:6px;">${name}</div>
+  return `<div style="max-width:520px;">
+    <div style="display:inline-block;background:${comp.color};color:${fg};font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;padding:6px 14px;border-radius:4px;margin-bottom:10px;">${name}</div>
     <div>${rows}</div>
   </div>`;
 }
 
-function renderHonourRoll(){
+function renderHonourCompetition(name){
   const container = document.getElementById('honourContainer');
   container.className = "";
-  container.innerHTML = `<div style="columns:2;column-gap:36px;max-width:820px;">` +
-    Object.entries(HONOUR_ROLL).map(([name, comp]) => honourCompetitionSectionHtml(name, comp)).join("") +
-    `</div>`;
+  container.innerHTML = honourCompetitionHtml(name, HONOUR_ROLL[name]);
+}
+
+function renderHonourRoll(){
+  const tabsEl = document.getElementById('honourTabs');
+  const names = Object.keys(HONOUR_ROLL);
+  tabsEl.innerHTML = names.map(name => `<button class="round-tab" data-name="${name}">${name}</button>`).join("");
+  tabsEl.querySelectorAll('.round-tab').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      tabsEl.querySelectorAll('.round-tab').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderHonourCompetition(btn.dataset.name);
+    });
+  });
+  tabsEl.firstChild.classList.add('active');
+  renderHonourCompetition(names[0]);
   document.getElementById('honourUpdated').textContent = "";
 }
 
