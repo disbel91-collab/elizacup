@@ -143,6 +143,40 @@
   .section-head h2{font-size:30px;margin:0;}
   .section-head .sub{font-family:'Barlow',sans-serif;font-size:12px;color:#6b7c73;text-transform:uppercase;letter-spacing:0.05em;}
 
+  /* ---------- Home page ---------- */
+  .home-hero{
+    text-align:center;padding:36px 12px 30px;border-bottom:2px solid var(--ink);margin-bottom:32px;
+  }
+  .home-hero-kicker{
+    font-family:'Barlow',sans-serif;font-size:12px;font-weight:600;color:var(--pitch);
+    text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;
+  }
+  .home-hero-title{font-size:56px;margin:0 0 10px;line-height:1;}
+  .home-hero-sub{font-family:'Barlow',sans-serif;font-size:15px;color:#5a6a63;max-width:480px;margin:0 auto;}
+
+  .home-card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
+  .home-card{
+    display:block;background:#fff;border:1px solid var(--line-light);border-radius:6px;
+    padding:16px 18px;text-decoration:none;transition:box-shadow 0.15s, transform 0.15s;
+  }
+  .home-card:hover{box-shadow:0 4px 14px rgba(0,0,0,0.08);transform:translateY(-1px);}
+  .home-card-title{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;margin-bottom:4px;}
+  .home-card-sub{font-family:'Barlow',sans-serif;font-size:12.5px;color:#6b7c73;}
+  .home-mini-pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
+  .home-mini-pill{
+    font-family:'Barlow',sans-serif;font-size:11px;font-weight:600;color:#fff;
+    padding:4px 9px;border-radius:12px;text-decoration:none;
+  }
+
+  .home-champ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+  .home-champ{border-radius:6px;padding:14px 16px;}
+  .home-champ-comp{
+    font-family:'Barlow',sans-serif;font-size:10.5px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.8;margin-bottom:6px;
+  }
+  .home-champ-team{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;line-height:1.15;}
+  .home-champ-season{font-family:'Barlow',sans-serif;font-size:11.5px;opacity:0.75;margin-top:4px;}
+
+
   /* Table */
   .table-wrap{overflow-x:auto;border:1px solid var(--line-light);border-radius:4px;}
   table.standings{width:100%;border-collapse:collapse;min-width:640px;}
@@ -457,6 +491,10 @@
 </div>
 
 <main>
+  <section id="homeSection" style="display:none;">
+    <div id="homeContainer"></div>
+  </section>
+
   <section id="tableSection">
     <div class="section-head">
       <h2>League Table</h2>
@@ -543,6 +581,7 @@
 const SHEET_ID = "1pkSwNM4KpkFJ9MM1Pja2sOPrvZA9TKxI8tZJLigyKsY";
 
 const DIVISIONS = [
+  { id: "home", label: "Home",                    pill: "Home",    gid: null,         teams: 0,  color: "#28427c", type: "home" },
   { id: "d1",  label: "Division 1 (Eliza Cup)", pill: "Div. 1",  gid: "1124941542", teams: 14, color: "#28427c", type: "division" },
   { id: "d2a", label: "Division 2A",            pill: "Div. 2A", gid: "919912875",  teams: 12, color: "#bc3532", type: "division" },
   { id: "d2b", label: "Division 2B",            pill: "Div. 2B", gid: "1047201294", teams: 12, color: "#990000", type: "division" },
@@ -633,6 +672,8 @@ function togglePageSections(){
   const isFACup = type === "facup";
   const isECL = type === "ecl";
   const isHonour = type === "honour";
+  const isHome = type === "home";
+  document.getElementById('homeSection').style.display = isHome ? "" : "none";
   document.getElementById('tableSection').style.display = isDivision ? "" : "none";
   document.getElementById('fixturesSection').style.display = isDivision ? "" : "none";
   document.getElementById('h2hSection').style.display = isDivision ? "" : "none";
@@ -645,6 +686,13 @@ function togglePageSections(){
 
 async function load(){
   togglePageSections();
+
+  if(currentDivision.type === "home"){
+    renderHome();
+    document.getElementById('statusLine').innerHTML = "";
+    return;
+  }
+
   setStatus("Connecting to live sheet…");
 
   if(currentDivision.type === "roddy"){
@@ -2235,6 +2283,79 @@ function renderHonourRoll(){
   renderHonourCompetition(names[0]);
   document.getElementById('honourUpdated').textContent = "";
   renderTrophyLeaders();
+}
+
+// ---------- Home page ----------
+function homeCardHtml({id, title, subtitle, color, fg}){
+  return `<a href="#${id}" class="home-card" data-id="${id}" style="border-left:5px solid ${color};">
+    <div class="home-card-title" style="color:${color};">${title}</div>
+    <div class="home-card-sub">${subtitle}</div>
+  </a>`;
+}
+
+function homeDivisionsCardHtml(){
+  const divs = DIVISIONS.filter(d => d.type === "division");
+  const pills = divs.map(d => `<a href="#${d.id}" class="home-mini-pill" style="background:${d.color};">${d.pill}</a>`).join("");
+  return `<a href="#d1" class="home-card" data-id="d1" style="border-left:5px solid #28427c;">
+    <div class="home-card-title" style="color:#28427c;">Divisions</div>
+    <div class="home-card-sub">League tables, fixtures &amp; head-to-head</div>
+    <div class="home-mini-pills">${pills}</div>
+  </a>`;
+}
+
+function homeReigningChampionHtml(compName){
+  const comp = HONOUR_ROLL[compName];
+  if(!comp || !comp.winners.length) return "";
+  const [season, winner] = comp.winners[0];
+  const fg = comp.textColor || "#fff";
+  return `<div class="home-champ" style="background:${comp.color};color:${fg};">
+    <div class="home-champ-comp">${compName}</div>
+    <div class="home-champ-team">${winner}</div>
+    <div class="home-champ-season">${season}</div>
+  </div>`;
+}
+
+function renderHome(){
+  const container = document.getElementById('homeContainer');
+  container.innerHTML = `
+    <div class="home-hero">
+      <div class="home-hero-kicker">2025-26 Season</div>
+      <h1 class="home-hero-title">Eliza Cup</h1>
+      <p class="home-hero-sub">Five divisions. Three cups. One trophy cabinet. Everything for the league, live from the sheet.</p>
+    </div>
+
+    <div class="home-card-grid">
+      ${homeDivisionsCardHtml()}
+      ${homeCardHtml({id:"roddy", title:"Roddy Rodriguez Cup", subtitle:"Combined leaderboard, every division", color:"#28427c"})}
+      ${homeCardHtml({id:"facup", title:"Eliza FA Cup", subtitle:"Knockout bracket &amp; byes", color:"#0a2f85"})}
+      ${homeCardHtml({id:"ecl", title:"Eliza Champions League", subtitle:"Groups, qualifiers &amp; knockout", color:"#111111"})}
+      ${homeCardHtml({id:"honour", title:"Hall of Fame", subtitle:"Every champion since 2012-13", color:"#8B6914"})}
+    </div>
+
+    <div class="section-head" style="margin-top:40px;">
+      <h2 style="font-size:22px;">Reigning Champions</h2>
+    </div>
+    <div class="home-champ-grid">
+      ${homeReigningChampionHtml("Eliza Cup")}
+      ${homeReigningChampionHtml("Roddy")}
+      ${homeReigningChampionHtml("FA Cup")}
+      ${homeReigningChampionHtml("ECL")}
+    </div>
+  `;
+  container.querySelectorAll('.home-card, .home-mini-pill').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.preventDefault();
+      const id = el.dataset.id || el.getAttribute('href').replace('#','');
+      const div = DIVISIONS.find(d=>d.id===id);
+      if(!div) return;
+      currentDivision = div;
+      location.hash = div.id;
+      document.getElementById('divPill').textContent = div.pill;
+      applyDivisionTheme(div);
+      renderDivNav();
+      load();
+    });
+  });
 }
 
 function renderFACup(){
