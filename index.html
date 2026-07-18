@@ -2781,40 +2781,84 @@ async function loadTeamProfile(teamName){
   );
 
   const eclDiv = DIVISIONS.find(d => d.id === "ecl");
+  let eclMatches = [];
   fetches.push(
     fetch(csvUrlFor(eclDiv)).then(r => r.text()).then(text => {
       const rows = Papa.parse(text, {skipEmptyLines:false}).data;
-      parseECL(rows);
+      parseECL(rows);           // populates eclGroups + eclDebug.groupHeadersFound
+      parseECLFixtures(rows);   // populates eclFixtures (depends on eclDebug from parseECL above)
+      parseECLKnockout(rows);   // populates eclKnockoutRounds
+
       for(const group of eclGroups){
         const teamRow = group.teams.find(t => (t.team||"").toUpperCase() === teamName.toUpperCase());
         if(teamRow){ eclSummary = { group: group.label, team: teamRow }; break; }
       }
+
+      eclFixtures.forEach(f=>{
+        const isHome = (f.home||"").toUpperCase() === teamName.toUpperCase();
+        const isAway = (f.away||"").toUpperCase() === teamName.toUpperCase();
+        if(isHome || isAway){
+          eclMatches.push({
+            label: f.matchday, opponent: isHome ? f.away : f.home, isHome,
+            homeScore: f.homeScore, awayScore: f.awayScore,
+            played: f.homeScore !== null && f.awayScore !== null
+          });
+        }
+      });
+      eclKnockoutRounds.forEach(round=>{
+        round.fixtures.forEach(f=>{
+          const isHome = (f.home||"").toUpperCase() === teamName.toUpperCase();
+          const isAway = (f.away||"").toUpperCase() === teamName.toUpperCase();
+          if(isHome || isAway){
+            eclMatches.push({
+              label: shortenFACupRound(round.name), opponent: isHome ? f.away : f.home, isHome,
+              homeScore: f.homeScore, awayScore: f.awayScore,
+              played: f.homeScore !== null && f.awayScore !== null
+            });
+          }
+        });
+      });
     })
   );
 
   await Promise.all(fetches);
-  renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary });
+  renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches });
+}
+
+function resultPillRow(label, opponent, isHome, homeScore, awayScore, played){
+  const scoreText = played ? `${homeScore} – ${awayScore}` : (opponent ? "vs" : "");
+  let result = "";
+  if(played){
+    if(isHome) result = homeScore > awayScore ? "W" : homeScore < awayScore ? "L" : "D";
+    else result = awayScore > homeScore ? "W" : awayScore < homeScore ? "L" : "D";
+  }
+  const cls = result === "W" ? "form-w" : result === "L" ? "form-l" : result === "D" ? "form-d" : "form-blank";
+  return `<div style="display:grid;grid-template-columns:56px 22px 1fr auto;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-light);">
+    <span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:#6b7c73;">${label}</span>
+    ${result ? `<span class="form-pill ${cls}">${result}</span>` : `<span></span>`}
+    <span style="font-size:13.5px;">${opponent ? (isHome ? "vs " : "@ ") + teamLink(opponent) : "Bye"}</span>
+    <span style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;">${scoreText}</span>
+  </div>`;
+}
+
+function shortenFACupRound(name){
+  const n = (name||"").toUpperCase();
+  const m = n.match(/ROUND OF (\d+)/);
+  if(m) return "R" + m[1];
+  if(/QUARTER/.test(n)) return "QF";
+  if(/SEMI/.test(n)) return "SF";
+  if(/FINAL/.test(n)) return "F";
+  return name;
 }
 
 function teamProfileFixtureRow(f){
-  const scoreText = f.played ? `${f.homeScore} – ${f.awayScore}` : "vs";
-  const result = f.played
-    ? (f.isHome ? (f.homeScore > f.awayScore ? "W" : f.homeScore < f.awayScore ? "L" : "D")
-                : (f.awayScore > f.homeScore ? "W" : f.awayScore < f.homeScore ? "L" : "D"))
-    : "";
-  const cls = result === "W" ? "form-w" : result === "L" ? "form-l" : result === "D" ? "form-d" : "form-blank";
-  return `<div style="display:grid;grid-template-columns:32px 22px 1fr auto;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-light);">
-    <span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:#6b7c73;">R${f.round}</span>
-    ${result ? `<span class="form-pill ${cls}">${result}</span>` : `<span></span>`}
-    <span style="font-size:13.5px;">${f.isHome ? "vs " : "@ "}${teamLink(f.opponent)}</span>
-    <span style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;">${scoreText}</span>
-  </div>`;
+  return resultPillRow("R" + f.round, f.opponent, f.isHome, f.homeScore, f.awayScore, f.played);
 }
 
 function renderTeamProfile(data){
   const container = document.getElementById('teamProfileContainer');
   container.className = "";
-  const { teamName, roddyEntry, divisionData, facupSummary, eclSummary } = data;
+  const { teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches } = data;
 
   if(!roddyEntry && !divisionData){
     container.innerHTML = `<div class="state-msg error">Couldn't find "${teamName}" anywhere in the league. Check the Debug panel below.</div>`;
@@ -2853,7 +2897,6 @@ function renderTeamProfile(data){
       <div style="display:flex;gap:24px;flex-wrap:wrap;font-family:'Barlow',sans-serif;font-size:13.5px;">
         <div><b>Pos:</b> ${roddyEntry.pos}</div>
         <div><b>Total:</b> ${roddyEntry.total}</div>
-        <div><b>Round reached:</b> ${roddyEntry.round || "—"}</div>
         <div><b>Overall rank:</b> ${roddyEntry.overall || "—"}</div>
       </div>`;
   }
@@ -2862,23 +2905,28 @@ function renderTeamProfile(data){
   if(facupSummary && facupSummary.length){
     html += `<div class="section-head" style="margin-top:32px;"><h2 style="font-size:18px;">Eliza FA Cup</h2></div>
       <div style="max-width:480px;">` + facupSummary.map(f=>{
+        const label = shortenFACupRound(f.roundName);
         if(f.fixture.isBye){
-          return `<div style="padding:7px 0;border-bottom:1px solid var(--line-light);font-size:13.5px;">${f.roundName}: <b>Bye</b></div>`;
+          return resultPillRow(label, null, true, null, null, false);
         }
         const opponent = f.isHome ? f.fixture.away : f.fixture.home;
         const played = f.fixture.homeScore !== null && f.fixture.awayScore !== null;
-        const scoreText = played ? `${f.fixture.homeScore} – ${f.fixture.awayScore}` : "vs";
-        return `<div style="padding:7px 0;border-bottom:1px solid var(--line-light);font-size:13.5px;">
-          ${f.roundName}: ${f.isHome ? "vs" : "@"} ${teamLink(opponent.name)} <span style="font-weight:600;">(${scoreText})</span>
-        </div>`;
+        return resultPillRow(label, opponent.name, f.isHome, f.fixture.homeScore, f.fixture.awayScore, played);
       }).join("") + `</div>`;
   }
 
   // ECL status
-  if(eclSummary){
-    const t = eclSummary.team;
-    html += `<div class="section-head" style="margin-top:32px;"><h2 style="font-size:18px;">Eliza Champions League</h2></div>
-      <div style="font-family:'Barlow',sans-serif;font-size:13.5px;">${eclSummary.group} · Pos ${t.pos} · ${t.pts} pts · ${t.status || "—"}</div>`;
+  if(eclSummary || (eclMatches && eclMatches.length)){
+    html += `<div class="section-head" style="margin-top:32px;"><h2 style="font-size:18px;">Eliza Champions League</h2></div>`;
+    if(eclSummary){
+      const t = eclSummary.team;
+      html += `<div style="font-family:'Barlow',sans-serif;font-size:13.5px;margin-bottom:10px;">${eclSummary.group} · Pos ${t.pos} · ${t.pts} pts · ${t.status || "—"}</div>`;
+    }
+    if(eclMatches && eclMatches.length){
+      html += `<div style="max-width:480px;">` +
+        eclMatches.map(m => resultPillRow(m.label, m.opponent, m.isHome, m.homeScore, m.awayScore, m.played)).join("") +
+        `</div>`;
+    }
   }
 
   container.innerHTML = html;
