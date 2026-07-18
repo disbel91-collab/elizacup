@@ -178,7 +178,7 @@
 
 
   /* Table */
-  .table-wrap{overflow-x:auto;border:1px solid var(--line-light);border-radius:4px;}
+  .table-wrap{overflow-x:auto;overflow-y:visible;border:1px solid var(--line-light);border-radius:4px;}
   table.standings{width:100%;border-collapse:collapse;min-width:640px;}
   table.standings thead th{
     background:var(--pitch);
@@ -198,18 +198,24 @@
   }
 
   /* Locked (sticky) Pos + Team columns — stay in view while the rest of the table
-     scrolls horizontally underneath. background-color:inherit keeps each cell opaque
-     and matching its row's actual color (stripe, tier, bye/double, etc). */
+     scrolls horizontally underneath. Header cells keep their existing solid pitch-blue
+     background (set above); only body cells need background-color:inherit, to pick up
+     whatever color that particular row actually has (stripe, tier, bye/double, etc). */
   table.standings thead th:first-child, table.standings tbody td:first-child,
   table.roddy-table thead th:first-child, table.roddy-table tbody td:first-child{
-    position:sticky; left:0; z-index:3; background-color:inherit;
+    position:sticky; left:0; z-index:3;
   }
   table.standings thead th:nth-child(2), table.standings tbody td:nth-child(2),
   table.roddy-table thead th:nth-child(2), table.roddy-table tbody td:nth-child(2){
-    position:sticky; left:28px; z-index:3; background-color:inherit;
+    position:sticky; left:28px; z-index:3;
   }
   table.trophy-table thead th:first-child, table.trophy-table tbody td:first-child{
-    position:sticky; left:0; z-index:3; background-color:inherit;
+    position:sticky; left:0; z-index:3;
+  }
+  table.standings tbody td:first-child, table.standings tbody td:nth-child(2),
+  table.roddy-table tbody td:first-child, table.roddy-table tbody td:nth-child(2),
+  table.trophy-table tbody td:first-child{
+    background-color:inherit;
   }
   thead th:first-child, thead th:nth-child(2){ z-index:4; }
 
@@ -382,9 +388,13 @@
     background:var(--chalk);border:1px solid var(--line-light);border-radius:4px;
     padding:4px 10px; color:var(--pitch);white-space:nowrap;
   }
-  .fixture-score .win{color:var(--pitch-2);}
-  .fixture-score .lose{color:#8a8a80;}
+  .fixture-score .fx-win{color:var(--turf);}
+  .fixture-score .fx-lose{color:var(--red);}
+  .fixture-score .fx-draw{color:#C99A2E;}
   .fixture-score .upcoming{color:#a8a296;font-style:italic;font-size:14px;}
+  .fixture-team.fx-win, .facup-team.fx-win{color:var(--turf);}
+  .fixture-team.fx-lose, .facup-team.fx-lose{color:var(--red);}
+  .fixture-team.fx-draw, .facup-team.fx-draw{color:#C99A2E;}
 
   /* ---------- Head-to-head section ---------- */
   .h2h-card{
@@ -1426,13 +1436,15 @@ function renderFixtures(round){
     const hasScore = f.homeScore !== null && f.awayScore !== null;
     const homeWin = hasScore && f.homeScore > f.awayScore;
     const awayWin = hasScore && f.awayScore > f.homeScore;
+    const isDraw = hasScore && f.homeScore === f.awayScore;
+    const resultClass = (won) => hasScore ? (won ? "fx-win" : isDraw ? "fx-draw" : "fx-lose") : "";
     const scoreHtml = hasScore
-      ? `<span class="${homeWin?'win':(awayWin?'lose':'')}">${f.homeScore}</span> – <span class="${awayWin?'win':(homeWin?'lose':'')}">${f.awayScore}</span>`
+      ? `<span class="${resultClass(homeWin)}">${f.homeScore}</span> – <span class="${resultClass(awayWin)}">${f.awayScore}</span>`
       : `<span class="upcoming">vs</span>`;
     return `<div class="fixture-card">
-      <div class="fixture-team">${teamLink(f.home)}</div>
+      <div class="fixture-team ${resultClass(homeWin)}">${teamLink(f.home)}</div>
       <div class="fixture-score">${scoreHtml}</div>
-      <div class="fixture-team right">${teamLink(f.away)}</div>
+      <div class="fixture-team right ${resultClass(awayWin)}">${teamLink(f.away)}</div>
     </div>`;
   }).join("");
 }
@@ -1792,16 +1804,18 @@ function facupFixtureCardHtml(f){
   const hasScore = f.homeScore !== null && f.awayScore !== null;
   const homeWin = hasScore && f.homeScore > f.awayScore;
   const awayWin = hasScore && f.awayScore > f.homeScore;
+  const isDraw = hasScore && f.homeScore === f.awayScore;
+  const resultClass = (won) => hasScore ? (won ? "fx-win" : isDraw ? "fx-draw" : "fx-lose") : "";
   const scoreHtml = f.isBye
     ? `<span class="upcoming">BYE</span>`
     : hasScore
-      ? `<span class="${homeWin?'win':(awayWin?'lose':'')}">${f.homeScore}</span> – <span class="${awayWin?'win':(homeWin?'lose':'')}">${f.awayScore}</span>`
+      ? `<span class="${resultClass(homeWin)}">${f.homeScore}</span> – <span class="${resultClass(awayWin)}">${f.awayScore}</span>`
       : `<span class="upcoming">vs</span>`;
   const divTag = d => d ? `<span class="roddy-div-tag" style="background:${getDivisionColorByLabel(d)};font-size:9px;margin-left:5px;flex-shrink:0;">${d}</span>` : "";
   return `<div class="facup-card">
-    <div class="facup-team facup-team-home"><span class="facup-team-name">${f.home.name || "TBD"}</span>${divTag(f.home.division)}</div>
+    <div class="facup-team facup-team-home ${resultClass(homeWin)}"><span class="facup-team-name">${f.home.name || "TBD"}</span>${divTag(f.home.division)}</div>
     <div class="fixture-score">${scoreHtml}</div>
-    <div class="facup-team facup-team-away">${divTag(f.away.division)}<span class="facup-team-name">${f.away.name || "TBD"}</span></div>
+    <div class="facup-team facup-team-away ${resultClass(awayWin)}">${divTag(f.away.division)}<span class="facup-team-name">${f.away.name || "TBD"}</span></div>
   </div>`;
 }
 
@@ -2174,11 +2188,12 @@ function eclFixturesHtml(){
         const scoreText = played ? `${f.homeScore} - ${f.awayScore}` : "vs";
         const homeWon = played && f.homeScore > f.awayScore;
         const awayWon = played && f.awayScore > f.homeScore;
-        const winColor = "#4ADE80", loseColor = "#F5F5F0";
+        const isDraw = played && f.homeScore === f.awayScore;
+        const resultColor = (won) => !played ? "#F5F5F0" : won ? "#4ADE80" : isDraw ? "#FBBF24" : "#F87171";
         html += `<div style="background:#1c1c1c;border:1px solid #333;border-radius:6px;padding:10px 14px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;">
-          <span style="text-align:right;font-size:13px;overflow-wrap:break-word;color:${homeWon ? winColor : loseColor};font-weight:${homeWon ? "700" : "400"};">${f.home}</span>
+          <span style="text-align:right;font-size:13px;overflow-wrap:break-word;color:${resultColor(homeWon)};font-weight:${homeWon ? "700" : "400"};">${f.home}</span>
           <span style="font-weight:700;color:#ffdd00;white-space:nowrap;">${scoreText}</span>
-          <span style="text-align:left;font-size:13px;overflow-wrap:break-word;color:${awayWon ? winColor : loseColor};font-weight:${awayWon ? "700" : "400"};">${f.away}</span>
+          <span style="text-align:left;font-size:13px;overflow-wrap:break-word;color:${resultColor(awayWon)};font-weight:${awayWon ? "700" : "400"};">${f.away}</span>
         </div>`;
       });
       html += `</div>`;
@@ -2260,11 +2275,12 @@ function eclFixtureCardHtml(f){
   const scoreText = played ? `${f.homeScore} - ${f.awayScore}` : "vs";
   const homeWon = played && f.homeScore > f.awayScore;
   const awayWon = played && f.awayScore > f.homeScore;
-  const winColor = "#4ADE80", loseColor = "#F5F5F0";
+  const isDraw = played && f.homeScore === f.awayScore;
+  const resultColor = (won) => !played ? "#F5F5F0" : won ? "#4ADE80" : isDraw ? "#FBBF24" : "#F87171";
   return `<div style="background:#1c1c1c;border:1px solid #333;border-radius:6px;padding:10px 14px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;">
-    <span style="text-align:right;font-size:13px;overflow-wrap:break-word;color:${homeWon ? winColor : loseColor};font-weight:${homeWon ? "700" : "400"};">${f.home}</span>
+    <span style="text-align:right;font-size:13px;overflow-wrap:break-word;color:${resultColor(homeWon)};font-weight:${homeWon ? "700" : "400"};">${f.home}</span>
     <span style="font-weight:700;color:#ffdd00;white-space:nowrap;">${scoreText}</span>
-    <span style="text-align:left;font-size:13px;overflow-wrap:break-word;color:${awayWon ? winColor : loseColor};font-weight:${awayWon ? "700" : "400"};">${f.away}</span>
+    <span style="text-align:left;font-size:13px;overflow-wrap:break-word;color:${resultColor(awayWon)};font-weight:${awayWon ? "700" : "400"};">${f.away}</span>
   </div>`;
 }
 
@@ -2880,6 +2896,44 @@ function teamProfileFixtureRow(f){
   return resultPillRow("R" + f.round, f.opponent, f.isHome, f.homeScore, f.awayScore, f.played);
 }
 
+function ordinal(n){
+  const s = ["th","st","nd","rd"], v = n % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
+}
+
+function facupStatusText(summary){
+  if(!summary || !summary.length) return "Not entered";
+  const last = summary[summary.length-1];
+  const label = shortenFACupRound(last.roundName);
+  if(last.fixture.isBye) return `Bye (${label})`;
+  const played = last.fixture.homeScore !== null && last.fixture.awayScore !== null;
+  if(!played) return `${label} — upcoming`;
+  const won = last.isHome ? last.fixture.homeScore > last.fixture.awayScore : last.fixture.awayScore > last.fixture.homeScore;
+  const isDraw = last.fixture.homeScore === last.fixture.awayScore;
+  if(won) return label === "F" ? "Champions 🏆" : `Won ${label}`;
+  if(isDraw) return `Drew ${label}`;
+  return `Eliminated (${label})`;
+}
+
+function eclStatusText(eclSummary, eclMatches){
+  if(eclSummary && eclSummary.team.status) return eclSummary.team.status;
+  if(eclMatches && eclMatches.length){
+    const last = eclMatches[eclMatches.length-1];
+    if(!last.played) return `${last.label} — upcoming`;
+    const won = last.isHome ? last.homeScore > last.awayScore : last.awayScore > last.homeScore;
+    if(won) return `Won ${last.label}`;
+    return last.homeScore === last.awayScore ? `Drew ${last.label}` : `Eliminated (${last.label})`;
+  }
+  return "Not entered";
+}
+
+function overviewCardHtml(label, value, color){
+  return `<div style="background:#fff;border:1px solid var(--line-light);border-left:4px solid ${color};border-radius:5px;padding:12px 14px;">
+    <div style="font-family:'Barlow',sans-serif;font-size:10.5px;color:#6b7c73;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px;">${label}</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;">${value}</div>
+  </div>`;
+}
+
 function renderTeamProfile(data){
   const container = document.getElementById('teamProfileContainer');
   container.className = "";
@@ -2898,6 +2952,16 @@ function renderTeamProfile(data){
     ${divLabel ? `<span class="sub" style="background:${divColor};color:#fff;padding:3px 9px;border-radius:10px;text-transform:none;">Division ${divLabel}</span>` : ""}
   </div>`;
 
+  // Overview
+  const leagueVal = (divisionData && divisionData.standingsRow) ? `${ordinal(divisionData.standingsRow.pos)} · Div ${divLabel}` : "—";
+  const roddyVal = roddyEntry ? `${ordinal(roddyEntry.pos)} · ${roddyEntry.total} pts` : "Not entered";
+  html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;max-width:640px;margin-bottom:28px;">
+    ${overviewCardHtml("League Position", leagueVal, divColor)}
+    ${overviewCardHtml("Roddy Position", roddyVal, "#ffdd00")}
+    ${overviewCardHtml("FA Cup", facupStatusText(facupSummary), "#0a2f85")}
+    ${overviewCardHtml("ECL", eclStatusText(eclSummary, eclMatches), "#111111")}
+  </div>`;
+
   // Season record + fixtures
   if(divisionData){
     const s = divisionData.standingsRow;
@@ -2914,16 +2978,6 @@ function renderTeamProfile(data){
       html += `<div class="section-head" style="margin-top:8px;"><h2 style="font-size:18px;">Season Fixtures &amp; Results</h2></div>
         <div style="max-width:480px;">${divisionData.fixtures.map(teamProfileFixtureRow).join("")}</div>`;
     }
-  }
-
-  // Roddy status
-  if(roddyEntry){
-    html += `<div class="section-head" style="margin-top:32px;"><h2 style="font-size:18px;">Roddy Rodriguez Cup</h2></div>
-      <div style="display:flex;gap:24px;flex-wrap:wrap;font-family:'Barlow',sans-serif;font-size:13.5px;">
-        <div><b>Pos:</b> ${roddyEntry.pos}</div>
-        <div><b>Total:</b> ${roddyEntry.total}</div>
-        <div><b>Overall rank:</b> ${roddyEntry.overall || "—"}</div>
-      </div>`;
   }
 
   // FA Cup status
