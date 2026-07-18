@@ -196,6 +196,23 @@
   table.standings thead th:first-child, table.standings tbody td:first-child{
     width:28px; padding-left:10px; padding-right:2px;
   }
+
+  /* Locked (sticky) Pos + Team columns — stay in view while the rest of the table
+     scrolls horizontally underneath. background-color:inherit keeps each cell opaque
+     and matching its row's actual color (stripe, tier, bye/double, etc). */
+  table.standings thead th:first-child, table.standings tbody td:first-child,
+  table.roddy-table thead th:first-child, table.roddy-table tbody td:first-child{
+    position:sticky; left:0; z-index:3; background-color:inherit;
+  }
+  table.standings thead th:nth-child(2), table.standings tbody td:nth-child(2),
+  table.roddy-table thead th:nth-child(2), table.roddy-table tbody td:nth-child(2){
+    position:sticky; left:28px; z-index:3; background-color:inherit;
+  }
+  table.trophy-table thead th:first-child, table.trophy-table tbody td:first-child{
+    position:sticky; left:0; z-index:3; background-color:inherit;
+  }
+  thead th:first-child, thead th:nth-child(2){ z-index:4; }
+
   table.standings tbody td{
     padding:10px 8px;
     text-align:center;
@@ -206,6 +223,7 @@
   table.standings tbody td:nth-child(2){
     text-align:left;font-family:'Barlow',sans-serif;font-weight:600;font-size:14.5px;padding-left:6px;
   }
+  table.standings tbody tr:nth-child(odd){background:#fff;}
   table.standings tbody tr:nth-child(even){background:#FBF9F3;}
   table.standings tbody tr:hover{background:#F0EAD8 !important;}
   table.standings tbody tr td:first-child{
@@ -2031,6 +2049,15 @@ function eclQualifiersTableHtml(){
   return html;
 }
 
+function eclMdPill(value){
+  const v = (value||"").trim().toUpperCase();
+  if(v === "W" || v === "D" || v === "L"){
+    const cls = v === "W" ? "form-w" : v === "L" ? "form-l" : "form-d";
+    return `<span class="form-pill ${cls}">${v}</span>`;
+  }
+  return value || "—";
+}
+
 function eclGroupTableHtml(g){
   let html = `<div class="section-head" style="margin-top:28px;">
       <h3 style="font-family:'Barlow Condensed',sans-serif;font-size:20px;margin:0;letter-spacing:0.02em;">${g.label}</h3>
@@ -2057,9 +2084,9 @@ function eclGroupTableHtml(g){
       <td>${t.ptsFor}</td>
       <td>${t.ptsAgn}</td>
       <td class="${diffClass}">${!isNaN(diffNum) && diffNum > 0 ? "+" : ""}${t.diff}</td>
-      <td>${t.md1 || "—"}</td>
-      <td>${t.md2 || "—"}</td>
-      <td>${t.md3 || "—"}</td>
+      <td>${eclMdPill(t.md1)}</td>
+      <td>${eclMdPill(t.md2)}</td>
+      <td>${eclMdPill(t.md3)}</td>
       <td class="next-opp">${t.nextOpponent || "—"}</td>
       <td>${t.status || "—"}</td>
     </tr>`;
@@ -2834,7 +2861,7 @@ function resultPillRow(label, opponent, isHome, homeScore, awayScore, played){
   return `<div style="display:grid;grid-template-columns:56px 22px 1fr auto;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-light);">
     <span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:#6b7c73;">${label}</span>
     ${result ? `<span class="form-pill ${cls}">${result}</span>` : `<span></span>`}
-    <span style="font-size:13.5px;">${opponent ? (isHome ? "vs " : "@ ") + teamLink(opponent) : "Bye"}</span>
+    <span style="font-size:13.5px;">${opponent ? "vs " + teamLink(opponent) : "Bye"}</span>
     <span style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;">${scoreText}</span>
   </div>`;
 }
