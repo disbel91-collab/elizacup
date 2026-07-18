@@ -1022,6 +1022,8 @@ async function load(){
     document.getElementById('teamProfileContainer').className = "state-msg";
     try{
       await loadTeamProfile(currentDivision.teamName);
+      document.getElementById('debugOut').textContent =
+        "Historical debug: " + JSON.stringify(historicalDebug, null, 2);
       setStatus("Live — updated " + new Date().toLocaleString());
     }catch(err){
       console.error(err);
@@ -2862,8 +2864,81 @@ async function loadTeamProfile(teamName){
     })
   );
 
+  const dataDiv = { gid: "91806689" };
+  let historicalRecords = [];
+  fetches.push(
+    fetch(csvUrlFor(dataDiv)).then(r => r.text()).then(text => {
+      const rows = Papa.parse(text, {skipEmptyLines:false}).data;
+      historicalRecords = findHistoricalRecords(rows, teamName);
+    })
+  );
+
   await Promise.all(fetches);
-  renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches });
+  renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords });
+}
+
+// ---------- Historical Record (Data tab) ----------
+// Cells DI1:EC64. Column letters converted to 0-based indices: DI=112 (team name),
+// then 4 season blocks of 5 columns each (division, league pos, roddy pos, fa cup
+// pos, ecl pos): DJ-DN (22/23), DO-DS (23/24), DT-DX (24/25), DY-EC (25/26).
+const HIST_COL = {
+  TEAM: 112,
+  SEASONS: [
+    { label: "22/23", division: 113, leaguePos: 114, roddyPos: 115, facupPos: 116, eclPos: 117 },
+    { label: "23/24", division: 118, leaguePos: 119, roddyPos: 120, facupPos: 121, eclPos: 122 },
+    { label: "24/25", division: 123, leaguePos: 124, roddyPos: 125, facupPos: 126, eclPos: 127 },
+    { label: "25/26", division: 128, leaguePos: 129, roddyPos: 130, facupPos: 131, eclPos: 132 }
+  ]
+};
+
+let historicalDebug = {};
+
+function findHistoricalRecords(rows, teamName){
+  historicalDebug = { rowsScanned: 0, matchedRow: -1 };
+  historicalDebug.rawRowDump = rows.slice(0, 5).map((row, r) =>
+    "row" + r + ": " + HIST_COL.SEASONS.map((s,i) =>
+      `[season${i}: div=${cell(row,s.division)} league=${cell(row,s.leaguePos)} roddy=${cell(row,s.roddyPos)} facup=${cell(row,s.facupPos)} ecl=${cell(row,s.eclPos)}]`
+    ).join(" ") + ` team="${cell(row, HIST_COL.TEAM)}"`
+  );
+
+  for(let r=0; r<rows.length; r++){
+    const team = cell(rows[r]||[], HIST_COL.TEAM);
+    if(!team) continue;
+    historicalDebug.rowsScanned++;
+    if(team.toUpperCase() === teamName.toUpperCase()){
+      historicalDebug.matchedRow = r;
+      const records = HIST_COL.SEASONS.map(s => ({
+        season: s.label,
+        division: cell(rows[r]||[], s.division),
+        leaguePos: cell(rows[r]||[], s.leaguePos),
+        roddyPos: cell(rows[r]||[], s.roddyPos),
+        facupPos: cell(rows[r]||[], s.facupPos),
+        eclPos: cell(rows[r]||[], s.eclPos)
+      })).filter(rec => rec.division || rec.leaguePos);
+      return records.reverse(); // most recent season first
+    }
+  }
+  return [];
+}
+
+function historicalRecordHtml(records){
+  if(!records || !records.length) return "";
+  let html = `<div class="section-head" style="margin-top:32px;"><h2 style="font-size:18px;">Historical Record</h2></div>
+    <div class="table-wrap"><table class="standings compact"><thead><tr>
+      <th>Season</th><th>Division</th><th>League Pos</th><th>Roddy Pos</th><th>FA Cup Pos</th><th>ECL Pos</th>
+    </tr></thead><tbody>`;
+  records.forEach(r=>{
+    html += `<tr>
+      <td>${r.season}</td>
+      <td>${r.division || "—"}</td>
+      <td>${r.leaguePos || "—"}</td>
+      <td>${r.roddyPos || "—"}</td>
+      <td>${r.facupPos || "—"}</td>
+      <td>${r.eclPos || "—"}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  return html;
 }
 
 function resultPillRow(label, opponent, isHome, homeScore, awayScore, played){
@@ -2937,7 +3012,7 @@ function overviewCardHtml(label, value, color){
 function renderTeamProfile(data){
   const container = document.getElementById('teamProfileContainer');
   container.className = "";
-  const { teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches } = data;
+  const { teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords } = data;
 
   if(!roddyEntry && !divisionData){
     container.innerHTML = `<div class="state-msg error">Couldn't find "${teamName}" anywhere in the league. Check the Debug panel below.</div>`;
@@ -3007,6 +3082,9 @@ function renderTeamProfile(data){
         `</div>`;
     }
   }
+
+  // Historical Record
+  html += historicalRecordHtml(historicalRecords);
 
   container.innerHTML = html;
 }
