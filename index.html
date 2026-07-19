@@ -1028,7 +1028,8 @@ async function load(){
     try{
       await loadTeamProfile(currentDivision.teamName);
       document.getElementById('debugOut').textContent =
-        "Historical debug: " + JSON.stringify(historicalDebug, null, 2);
+        "Historical debug: " + JSON.stringify(historicalDebug, null, 2) + "\n\n" +
+        "H2H record debug: " + JSON.stringify(h2hRecordsDebug, null, 2);
       setStatus("Live — updated " + new Date().toLocaleString());
     }catch(err){
       console.error(err);
@@ -2882,15 +2883,17 @@ async function loadTeamProfile(teamName){
 
   const dataDiv = { gid: "91806689" };
   let historicalRecords = [];
+  let h2hRecords = [];
   fetches.push(
     fetch(csvUrlFor(dataDiv)).then(r => r.text()).then(text => {
       const rows = Papa.parse(text, {skipEmptyLines:false}).data;
       historicalRecords = findHistoricalRecords(rows, teamName);
+      h2hRecords = findH2HRecords(rows, teamName);
     })
   );
 
   await Promise.all(fetches);
-  renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords });
+  renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords });
 }
 
 // ---------- Historical Record (Data tab) ----------
@@ -2911,10 +2914,11 @@ let historicalDebug = {};
 
 function findHistoricalRecords(rows, teamName){
   historicalDebug = { rowsScanned: 0, matchedRow: -1 };
-  historicalDebug.rawRowDump = rows.slice(0, 5).map((row, r) =>
-    "row" + r + ": " + HIST_COL.SEASONS.map((s,i) =>
-      `[season${i}: div=${cell(row,s.division)} league=${cell(row,s.leaguePos)} roddy=${cell(row,s.roddyPos)} facup=${cell(row,s.facupPos)} ecl=${cell(row,s.eclPos)} overall=${cell(row,s.overall)}]`
-    ).join(" ") + ` team="${cell(row, HIST_COL.TEAM)}"`
+  // Fully unrestricted dump — every non-empty cell from column 100 to 145 (covers the
+  // team column through well past EG) so the real header/data positions are visible,
+  // rather than only showing whatever columns I'm currently (possibly wrongly) guessing.
+  historicalDebug.rawRowDump = rows.slice(0, 6).map((row, r) =>
+    "row" + r + ": " + (row || []).map((c, ci) => (ci >= 100 && ci <= 145 && c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
   );
 
   for(let r=0; r<rows.length; r++){
@@ -2923,6 +2927,7 @@ function findHistoricalRecords(rows, teamName){
     historicalDebug.rowsScanned++;
     if(team.toUpperCase() === teamName.toUpperCase()){
       historicalDebug.matchedRow = r;
+      historicalDebug.matchedRowDump = (rows[r]||[]).map((c, ci) => (ci >= 100 && ci <= 145 && c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ");
       const records = HIST_COL.SEASONS.map(s => ({
         season: s.label,
         division: cell(rows[r]||[], s.division),
@@ -2953,6 +2958,86 @@ function historicalRecordHtml(records){
       <td>${r.facupPos || "—"}</td>
       <td>${r.eclPos || "—"}</td>
       <td>${r.overall || "—"}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div>`;
+  return html;
+}
+
+// ---------- Head-to-Head Record (same Data tab, cells DI68:ER131) ----------
+// 7 competition blocks of 5 columns each (P/W/L/D/%): Eliza, Div 2, Div 3, FA Cup,
+// ECL, S/Deck Eliminator, Overall. Given the historical-positions table above turned
+// out to have unreliable column math in this exact area of the sheet, this one is
+// found by content (locating "ELIZA" then confirming "DIV 2" a few columns later)
+// rather than trusting fixed letter-derived positions.
+const H2H_COMPETITIONS = ["ELIZA", "DIV 2", "DIV 3", "FA CUP", "ECL", "S/DECK ELIMINATOR", "OVERALL"];
+
+let h2hRecordsDebug = {};
+
+function findH2HRecords(rows, teamName){
+  h2hRecordsDebug = { headerRow: -1, elizaCol: -1, rowsScanned: 0, matchedRow: -1 };
+
+  let headerRow = -1, elizaCol = -1, blockWidth = 5;
+  for(let r=0; r<rows.length && headerRow === -1; r++){
+    for(let c=100; c<=150; c++){
+      if((cell(rows[r]||[], c)||"").trim().toUpperCase() === "ELIZA"){
+        for(let off=4; off<=8; off++){
+          if((cell(rows[r]||[], c+off)||"").trim().toUpperCase() === "DIV 2"){
+            headerRow = r; elizaCol = c; blockWidth = off;
+            break;
+          }
+        }
+      }
+      if(headerRow !== -1) break;
+    }
+  }
+  h2hRecordsDebug.headerRow = headerRow;
+  h2hRecordsDebug.elizaCol = elizaCol;
+  h2hRecordsDebug.blockWidth = blockWidth;
+
+  if(headerRow === -1){
+    h2hRecordsDebug.rawRowDump = rows.slice(60, 75).map((row, i) =>
+      "row" + (60+i) + ": " + (row||[]).map((c,ci)=> (ci>=100&&ci<=150&&c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
+    );
+    return [];
+  }
+
+  const competitions = H2H_COMPETITIONS.map((name,i) => ({ name, start: elizaCol + i*blockWidth }));
+  h2hRecordsDebug.competitions = competitions;
+
+  for(let r=headerRow+1; r<rows.length; r++){
+    const team = cell(rows[r]||[], 112); // DI, same team column as the positions table
+    if(!team) continue;
+    h2hRecordsDebug.rowsScanned++;
+    if(team.toUpperCase() === teamName.toUpperCase()){
+      h2hRecordsDebug.matchedRow = r;
+      return competitions.map(comp => ({
+        competition: comp.name,
+        p: cell(rows[r]||[], comp.start),
+        w: cell(rows[r]||[], comp.start+1),
+        l: cell(rows[r]||[], comp.start+2),
+        d: cell(rows[r]||[], comp.start+3),
+        pct: cell(rows[r]||[], comp.start+4)
+      })).filter(rec => rec.p || rec.w || rec.l);
+    }
+  }
+  return [];
+}
+
+function h2hRecordHtml(records){
+  if(!records || !records.length) return "";
+  let html = `<div class="section-head" style="margin-top:32px;"><h2 style="font-size:18px;">Head-to-Head Record</h2></div>
+    <div class="table-wrap"><table class="standings compact history-table"><thead><tr>
+      <th>Competition</th><th>P</th><th>W</th><th>L</th><th>D</th><th>%</th>
+    </tr></thead><tbody>`;
+  records.forEach(r=>{
+    html += `<tr>
+      <td>${r.competition}</td>
+      <td>${r.p || "—"}</td>
+      <td>${r.w || "—"}</td>
+      <td>${r.l || "—"}</td>
+      <td>${r.d || "—"}</td>
+      <td>${r.pct || "—"}</td>
     </tr>`;
   });
   html += `</tbody></table></div>`;
@@ -3030,7 +3115,7 @@ function overviewCardHtml(label, value, color){
 function renderTeamProfile(data){
   const container = document.getElementById('teamProfileContainer');
   container.className = "";
-  const { teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords } = data;
+  const { teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords } = data;
 
   if(!roddyEntry && !divisionData){
     container.innerHTML = `<div class="state-msg error">Couldn't find "${teamName}" anywhere in the league. Check the Debug panel below.</div>`;
@@ -3103,6 +3188,7 @@ function renderTeamProfile(data){
 
   // Historical Record
   html += historicalRecordHtml(historicalRecords);
+  html += h2hRecordHtml(h2hRecords);
 
   container.innerHTML = html;
 }
