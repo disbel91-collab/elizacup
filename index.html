@@ -526,6 +526,13 @@
   table.trophy-table tbody td:nth-child(n+2){text-align:center;font-weight:400;padding-left:8px;}
   table.trophy-table{min-width:auto;}
   table.home-mini-table{min-width:0;}
+  table.h2h-record-table{min-width:0;width:100%;}
+  table.h2h-record-table thead th:first-child, table.h2h-record-table tbody td:first-child{
+    width:auto;padding-left:10px;font-weight:600;color:var(--ink);
+  }
+  table.h2h-record-table thead th:nth-child(n+2), table.h2h-record-table tbody td:nth-child(n+2){
+    width:44px;text-align:center;
+  }
 </style>
 </head>
 <body>
@@ -2929,8 +2936,11 @@ function findHistoricalRecords(rows, teamName){
         facupPos: cell(rows[r]||[], s.facupPos),
         eclPos: cell(rows[r]||[], s.eclPos),
         overall: cell(rows[r]||[], s.overall)
-      })).filter(rec => rec.division || rec.leaguePos);
-      return records.reverse();
+      }));
+      historicalDebug.allSeasonsRaw = records; // unfiltered — shows every season's fields as-read, before dropping empty ones
+      historicalDebug.matchedRowFullDump = (rows[r]||[]).map((c, ci) => (ci >= 105 && ci <= 140 && c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ");
+      const filtered = records.filter(rec => rec.division || rec.leaguePos);
+      return filtered.reverse();
     }
   }
   return [];
@@ -3017,12 +3027,12 @@ function findH2HRecords(rows, teamName){
 function h2hRecordHtml(records){
   if(!records || !records.length) return "";
   let html = `<div class="section-head" style="margin-top:32px;"><h2 style="font-size:18px;">Head-to-Head Record</h2></div>
-    <div class="table-wrap"><table class="standings compact history-table"><thead><tr>
-      <th>Competition</th><th>P</th><th>W</th><th>L</th><th>D</th><th>%</th>
+    <div class="table-wrap" style="max-width:460px;"><table class="standings compact h2h-record-table"><thead><tr>
+      <th style="text-align:left;">Competition</th><th>P</th><th>W</th><th>L</th><th>D</th><th>%</th>
     </tr></thead><tbody>`;
   records.forEach(r=>{
     html += `<tr>
-      <td>${r.competition}</td>
+      <td style="text-align:left;">${r.competition}</td>
       <td>${r.p || "—"}</td>
       <td>${r.w || "—"}</td>
       <td>${r.l || "—"}</td>
