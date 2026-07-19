@@ -2897,9 +2897,9 @@ async function loadTeamProfile(teamName){
 }
 
 // ---------- Historical Record (Data tab) ----------
-// Now 6 columns per season block (division, league pos, roddy pos, fa cup pos, ecl
-// pos, overall pos) — column letters converted to 0-based indices: DI=112 (team name),
-// then DJ-DO (22/23), DP-DU (23/24), DV-EA (24/25), EB-EG (25/26).
+// 6 columns per season block (division, league pos, roddy pos, fa cup pos, ecl pos,
+// overall pos) — column letters converted to 0-based indices: DI=112 (team name),
+// then DJ-DO (22/23), DP-DU (23/24), DV-EA (24/25), EB-EG (25/26). Confirmed by user.
 const HIST_COL = {
   TEAM: 112,
   SEASONS: [
@@ -2914,12 +2914,6 @@ let historicalDebug = {};
 
 function findHistoricalRecords(rows, teamName){
   historicalDebug = { rowsScanned: 0, matchedRow: -1 };
-  // Fully unrestricted dump — every non-empty cell from column 100 to 145 (covers the
-  // team column through well past EG) so the real header/data positions are visible,
-  // rather than only showing whatever columns I'm currently (possibly wrongly) guessing.
-  historicalDebug.rawRowDump = rows.slice(0, 6).map((row, r) =>
-    "row" + r + ": " + (row || []).map((c, ci) => (ci >= 100 && ci <= 145 && c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
-  );
 
   for(let r=0; r<rows.length; r++){
     const team = cell(rows[r]||[], HIST_COL.TEAM);
@@ -2927,7 +2921,6 @@ function findHistoricalRecords(rows, teamName){
     historicalDebug.rowsScanned++;
     if(team.toUpperCase() === teamName.toUpperCase()){
       historicalDebug.matchedRow = r;
-      historicalDebug.matchedRowDump = (rows[r]||[]).map((c, ci) => (ci >= 100 && ci <= 145 && c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ");
       const records = HIST_COL.SEASONS.map(s => ({
         season: s.label,
         division: cell(rows[r]||[], s.division),
@@ -2937,7 +2930,7 @@ function findHistoricalRecords(rows, teamName){
         eclPos: cell(rows[r]||[], s.eclPos),
         overall: cell(rows[r]||[], s.overall)
       })).filter(rec => rec.division || rec.leaguePos);
-      return records.reverse(); // most recent season first (25/26 -> 22/23)
+      return records.reverse();
     }
   }
   return [];
@@ -2970,43 +2963,40 @@ function historicalRecordHtml(records){
 // out to have unreliable column math in this exact area of the sheet, this one is
 // found by content (locating "ELIZA" then confirming "DIV 2" a few columns later)
 // rather than trusting fixed letter-derived positions.
+// Confirmed via raw dump: title "WIN RECORDS FROM H2H SHEET" anchors the section,
+// with the P/W/L/D/% sub-header row directly below it, then data starts the row
+// after that. 7 blocks of 5 columns starting at column 113 — verified against real
+// data (a team's Overall P total exactly matched the sum of all 7 blocks' P values).
 const H2H_COMPETITIONS = ["ELIZA", "DIV 2", "DIV 3", "FA CUP", "ECL", "S/DECK ELIMINATOR", "OVERALL"];
+const H2H_TEAM_COL = 112;
+const H2H_BLOCK_START = 113;
+const H2H_BLOCK_WIDTH = 5;
 
 let h2hRecordsDebug = {};
 
 function findH2HRecords(rows, teamName){
-  h2hRecordsDebug = { headerRow: -1, elizaCol: -1, rowsScanned: 0, matchedRow: -1 };
+  h2hRecordsDebug = { titleRow: -1, rowsScanned: 0, matchedRow: -1 };
 
-  let headerRow = -1, elizaCol = -1, blockWidth = 5;
-  for(let r=0; r<rows.length && headerRow === -1; r++){
-    for(let c=100; c<=150; c++){
-      if((cell(rows[r]||[], c)||"").trim().toUpperCase() === "ELIZA"){
-        for(let off=4; off<=8; off++){
-          if((cell(rows[r]||[], c+off)||"").trim().toUpperCase() === "DIV 2"){
-            headerRow = r; elizaCol = c; blockWidth = off;
-            break;
-          }
-        }
-      }
-      if(headerRow !== -1) break;
-    }
+  let titleRow = -1;
+  for(let r=0; r<rows.length; r++){
+    if(/WIN RECORDS FROM H2H SHEET/i.test(cell(rows[r]||[], H2H_TEAM_COL))){ titleRow = r; break; }
   }
-  h2hRecordsDebug.headerRow = headerRow;
-  h2hRecordsDebug.elizaCol = elizaCol;
-  h2hRecordsDebug.blockWidth = blockWidth;
+  h2hRecordsDebug.titleRow = titleRow;
 
-  if(headerRow === -1){
+  if(titleRow === -1){
     h2hRecordsDebug.rawRowDump = rows.slice(60, 75).map((row, i) =>
       "row" + (60+i) + ": " + (row||[]).map((c,ci)=> (ci>=100&&ci<=150&&c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
     );
     return [];
   }
 
-  const competitions = H2H_COMPETITIONS.map((name,i) => ({ name, start: elizaCol + i*blockWidth }));
+  const dataStartRow = titleRow + 2; // skip the P/W/L/D/% sub-header row
+  const competitions = H2H_COMPETITIONS.map((name,i) => ({ name, start: H2H_BLOCK_START + i*H2H_BLOCK_WIDTH }));
   h2hRecordsDebug.competitions = competitions;
+  h2hRecordsDebug.dataStartRow = dataStartRow;
 
-  for(let r=headerRow+1; r<rows.length; r++){
-    const team = cell(rows[r]||[], 112); // DI, same team column as the positions table
+  for(let r=dataStartRow; r<rows.length; r++){
+    const team = cell(rows[r]||[], H2H_TEAM_COL);
     if(!team) continue;
     h2hRecordsDebug.rowsScanned++;
     if(team.toUpperCase() === teamName.toUpperCase()){
