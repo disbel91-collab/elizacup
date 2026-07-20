@@ -163,7 +163,10 @@
     padding:16px 18px;text-decoration:none;transition:box-shadow 0.15s, transform 0.15s;
   }
   .home-card:hover{box-shadow:0 4px 14px rgba(0,0,0,0.08);transform:translateY(-1px);}
-  .home-card-title{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;margin-bottom:4px;}
+  .home-card-top{display:flex;align-items:center;gap:10px;margin-bottom:4px;}
+  .home-card-icon{width:28px;height:28px;object-fit:contain;flex-shrink:0;}
+  .home-card-icon-svg{display:inline-flex;align-items:center;justify-content:center;}
+  .home-card-title{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;margin:0;}
   .home-card-sub{font-family:'Barlow',sans-serif;font-size:12.5px;color:#6b7c73;}
   .home-mini-pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
   .home-mini-pill{
@@ -173,8 +176,10 @@
 
   .home-champ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
   .home-champ{border-radius:6px;padding:14px 16px;}
+  .home-champ-top{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .home-champ-logo{width:26px;height:26px;object-fit:contain;flex-shrink:0;}
   .home-champ-comp{
-    font-family:'Barlow',sans-serif;font-size:10.5px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.8;margin-bottom:6px;
+    font-family:'Barlow',sans-serif;font-size:10.5px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.8;margin:0;
   }
   .home-champ-team{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;line-height:1.15;}
   .home-champ-season{font-family:'Barlow',sans-serif;font-size:11.5px;opacity:0.75;margin-top:4px;}
@@ -3168,19 +3173,20 @@ function renderTeamProfile(data){
   }
 
   const divColor = roddyEntry ? getDivisionColorByLabel(roddyEntry.division) : "#28427c";
-  const divLabel = roddyEntry ? getDivisionShortLabel(roddyEntry.division) : "";
+  const divShort = roddyEntry ? getDivisionShortLabel(roddyEntry.division) : "";
+  const divLabel = divShort === "D1" ? "Eliza Cup" : divShort;
   const logoSrc = `logo/${teamLogoSlug(teamName)}.png`;
   const logoOnError = `if(!this.dataset.fallback){this.dataset.fallback='1';this.src='logo/eliza-elephant.png';}else{this.style.display='none';}`;
 
   // Overview
-  const leagueVal = (divisionData && divisionData.standingsRow) ? `${ordinal(divisionData.standingsRow.pos)} · Div ${divLabel}` : "—";
+  const leagueVal = (divisionData && divisionData.standingsRow) ? `${ordinal(divisionData.standingsRow.pos)} · ${divLabel}` : "—";
   const roddyVal = roddyEntry ? `${ordinal(roddyEntry.pos)} · ${roddyEntry.total} pts` : "Not entered";
 
   let html = `<div class="team-profile-top">
     <div class="team-profile-main">
       <div class="team-profile-heading">
         <h2 class="team-profile-name">${teamName}</h2>
-        ${divLabel ? `<span class="sub" style="background:${divColor};color:#fff;padding:3px 9px;border-radius:10px;text-transform:none;">Division ${divLabel}</span>` : ""}
+        ${divLabel ? `<span class="sub" style="background:${divColor};color:#fff;padding:3px 9px;border-radius:10px;text-transform:none;">${divShort === "D1" ? divLabel : "Division " + divLabel}</span>` : ""}
       </div>
       <div class="team-profile-cards">
         ${overviewCardHtml("League Position", leagueVal, divColor)}
@@ -3236,9 +3242,17 @@ function renderTeamProfile(data){
 }
 
 // ---------- Home page ----------
-function homeCardHtml({id, title, subtitle, color, fg}){
+function homeCardHtml({id, title, subtitle, color, logo, icon}){
+  const media = logo
+    ? `<img src="${logo}" alt="" class="home-card-icon" onerror="this.style.display='none';">`
+    : icon
+      ? `<span class="home-card-icon home-card-icon-svg" style="color:${color};">${icon}</span>`
+      : "";
   return `<a href="#${id}" class="home-card" data-id="${id}" style="border-left:5px solid ${color};">
-    <div class="home-card-title" style="color:${color};">${title}</div>
+    <div class="home-card-top">
+      ${media}
+      <div class="home-card-title" style="color:${color};">${title}</div>
+    </div>
     <div class="home-card-sub">${subtitle}</div>
   </a>`;
 }
@@ -3247,19 +3261,32 @@ function homeDivisionsCardHtml(){
   const divs = DIVISIONS.filter(d => d.type === "division");
   const pills = divs.map(d => `<a href="#${d.id}" class="home-mini-pill" style="background:${d.color};">${d.pill}</a>`).join("");
   return `<div class="home-card" data-id="d1" style="border-left:5px solid #28427c;cursor:pointer;">
-    <div class="home-card-title" style="color:#28427c;">Divisions</div>
-    <div class="home-card-sub">League tables, fixtures &amp; head-to-head</div>
+    <div class="home-card-top">
+      <img src="logo/eliza-logo.png" alt="" class="home-card-icon" onerror="this.style.display='none';">
+      <div class="home-card-title" style="color:#28427c;">Divisions</div>
+    </div>
+    <div class="home-card-sub">League tables, fixtures &amp; head to head matchups</div>
     <div class="home-mini-pills">${pills}</div>
   </div>`;
 }
+
+// Simple inline SVG icons for the sections without an uploaded logo file.
+const HOME_ICON_CALENDAR = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><circle cx="8" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="17" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></svg>`;
+const HOME_ICON_TROPHY = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 5H4a3 3 0 0 0 3 4"/><path d="M16 5h4a3 3 0 0 1-3 4"/><line x1="12" y1="13" x2="12" y2="17"/><path d="M8 21h8"/><path d="M9 17h6l1 4H8l1-4z"/></svg>`;
+const HOME_ICON_TEAMS = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="8.5" r="2.4"/><path d="M15.5 14.7c2.5.3 4.5 2.2 4.5 5.3"/></svg>`;
 
 function homeReigningChampionHtml(compName){
   const comp = HONOUR_ROLL[compName];
   if(!comp || !comp.winners.length) return "";
   const [season, winner] = comp.winners[0];
   const fg = comp.textColor || "#fff";
+  const teamName = winner.replace(/\s*\([^)]*\)\s*$/, "").trim(); // strip trailing "(1st)" etc for the logo slug
+  const logoOnError = `if(!this.dataset.fallback){this.dataset.fallback='1';this.src='logo/eliza-elephant.png';}else{this.style.display='none';}`;
   return `<div class="home-champ" style="background:${comp.color};color:${fg};">
-    <div class="home-champ-comp">${compName}</div>
+    <div class="home-champ-top">
+      <img src="logo/${teamLogoSlug(teamName)}.png" alt="" class="home-champ-logo" onerror="${logoOnError}">
+      <div class="home-champ-comp">${compName}</div>
+    </div>
     <div class="home-champ-team">${winner}</div>
     <div class="home-champ-season">${season}</div>
   </div>`;
@@ -3276,12 +3303,12 @@ function renderHome(){
 
     <div class="home-card-grid">
       ${homeDivisionsCardHtml()}
-      ${homeCardHtml({id:"roddy", title:"Roddy Rodriguez Cup", subtitle:"Combined leaderboard, every division", color:"#28427c"})}
-      ${homeCardHtml({id:"facup", title:"Eliza FA Cup", subtitle:"Knockout bracket &amp; byes", color:"#0a2f85"})}
-      ${homeCardHtml({id:"ecl", title:"Eliza Champions League", subtitle:"Groups, qualifiers &amp; knockout", color:"#111111"})}
-      ${homeCardHtml({id:"calendar", title:"Calendar", subtitle:"Every round, bye &amp; double week", color:"#28427c"})}
-      ${homeCardHtml({id:"honour", title:"Hall of Fame", subtitle:"Every champion since 2012-13", color:"#8B6914"})}
-      ${homeCardHtml({id:"teams", title:"Teams", subtitle:"Search any club's profile", color:"#28427c"})}
+      ${homeCardHtml({id:"roddy", title:"Roddy Rodriguez Cup", subtitle:"Overall leaderboard for teams in all divisions", color:"#28427c", logo:"logo/roddy-logo.png"})}
+      ${homeCardHtml({id:"facup", title:"Eliza FA Cup", subtitle:"Knockout competition for teams in all divisions", color:"#0a2f85", logo:"logo/fa-cup-logo.png"})}
+      ${homeCardHtml({id:"ecl", title:"Eliza Champions League", subtitle:"Group &amp; Knockout competition featuring last season's trophy winners", color:"#111111", logo:"logo/ecl-logo.png"})}
+      ${homeCardHtml({id:"calendar", title:"Calendar", subtitle:"Every round, bye &amp; double week", color:"#28427c", icon:HOME_ICON_CALENDAR})}
+      ${homeCardHtml({id:"honour", title:"Hall of Fame", subtitle:"Every champion since 2012-13", color:"#8B6914", icon:HOME_ICON_TROPHY})}
+      ${homeCardHtml({id:"teams", title:"Teams", subtitle:"Search any club's profile", color:"#28427c", icon:HOME_ICON_TEAMS})}
     </div>
 
     <div class="section-head" style="margin-top:40px;">
