@@ -3127,15 +3127,18 @@ function facupStatusText(summary){
 }
 
 function eclStatusText(eclSummary, eclMatches){
-  if(eclSummary && eclSummary.team.status) return eclSummary.team.status;
-  if(eclMatches && eclMatches.length){
-    const last = eclMatches[eclMatches.length-1];
-    if(!last.played) return `${last.label} — upcoming`;
+  if(!eclMatches || !eclMatches.length) return "Not entered";
+  const knockout = eclMatches.filter(m => m.label === "QF" || m.label === "SF" || m.label === "F");
+  if(knockout.length === 0) return "Group Stage";
+  const last = knockout[knockout.length - 1];
+  if(last.label === "QF") return "Quarter Final";
+  if(last.label === "SF") return "Semi Final";
+  if(last.label === "F"){
+    if(!last.played) return "Final";
     const won = last.isHome ? last.homeScore > last.awayScore : last.awayScore > last.homeScore;
-    if(won) return `Won ${last.label}`;
-    return last.homeScore === last.awayScore ? `Drew ${last.label}` : `Eliminated (${last.label})`;
+    return won ? "Winner 🏆" : "Runner Up";
   }
-  return "Not entered";
+  return "—";
 }
 
 function overviewCardHtml(label, value, color){
@@ -3189,18 +3192,8 @@ function renderTeamProfile(data){
     <img src="${logoSrc}" alt="" class="team-profile-logo" onerror="${logoOnError}">
   </div>`;
 
-  // Season record + fixtures
+  // Season fixtures
   if(divisionData){
-    const s = divisionData.standingsRow;
-    if(s){
-      html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:10px;max-width:520px;margin-bottom:24px;">
-        ${[["Pos", s.pos], ["Pts", s.pts], ["W", s.w], ["D", s.d], ["L", s.l], ["Diff", (s.diff>0?"+":"")+s.diff]].map(([label,val])=>`
-          <div style="background:#fff;border:1px solid var(--line-light);border-radius:5px;padding:10px 6px;text-align:center;">
-            <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;">${val}</div>
-            <div style="font-family:'Barlow',sans-serif;font-size:10px;color:#6b7c73;text-transform:uppercase;letter-spacing:0.05em;">${label}</div>
-          </div>`).join("")}
-      </div>`;
-    }
     if(divisionData.fixtures.length){
       html += `<div class="section-head" style="margin-top:8px;"><h2 style="font-size:18px;">Season Fixtures &amp; Results</h2></div>
         <div style="max-width:480px;">${divisionData.fixtures.map(teamProfileFixtureRow).join("")}</div>`;
