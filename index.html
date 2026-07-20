@@ -2903,13 +2903,20 @@ async function loadTeamProfile(teamName){
   );
 
   const dataDiv = { gid: "91806689" };
-  let historicalRecords = [];
   let h2hRecords = [];
   fetches.push(
     fetch(csvUrlFor(dataDiv)).then(r => r.text()).then(text => {
       const rows = Papa.parse(text, {skipEmptyLines:false}).data;
-      historicalRecords = findHistoricalRecords(rows, teamName);
       h2hRecords = findH2HRecords(rows, teamName);
+    })
+  );
+
+  const historyDiv = { gid: "1444343417" };
+  let historicalRecords = [];
+  fetches.push(
+    fetch(csvUrlFor(historyDiv)).then(r => r.text()).then(text => {
+      const rows = Papa.parse(text, {skipEmptyLines:false}).data;
+      historicalRecords = findHistoricalRecords(rows, teamName);
     })
   );
 
@@ -2917,74 +2924,35 @@ async function loadTeamProfile(teamName){
   renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords });
 }
 
-// ---------- Historical Record (Data tab) ----------
-// 6 columns per season block (division, league pos, roddy pos, fa cup pos, ecl pos,
-// overall pos) — column letters converted to 0-based indices: DI=112 (team name),
-// then DJ-DO (22/23), DP-DU (23/24), DV-EA (24/25), EB-EG (25/26). Confirmed by user.
+// ---------- Historical Record (dedicated tab, gid 1444343417) ----------
+// Column A = team name. Four 6-column blocks (division, league pos, roddy pos,
+// fa cup pos, ecl pos, overall pos): B:G (22/23), H:M (23/24), N:S (24/25), T:Y (25/26).
+// Header row 1 (sheet), data rows 2:63.
 const HIST_COL = {
-  TEAM: 112,
+  TEAM: 0,
   SEASONS: [
-    { label: "22/23", division: 113, leaguePos: 114, roddyPos: 115, facupPos: 116, eclPos: 117, overall: 118 },
-    { label: "23/24", division: 119, leaguePos: 120, roddyPos: 121, facupPos: 122, eclPos: 123, overall: 124 },
-    { label: "24/25", division: 125, leaguePos: 126, roddyPos: 127, facupPos: 128, eclPos: 129, overall: 130 },
-    { label: "25/26", division: 131, leaguePos: 132, roddyPos: 133, facupPos: 134, eclPos: 135, overall: 136 }
+    { label: "22/23", division: 1, leaguePos: 2, roddyPos: 3, facupPos: 4, eclPos: 5, overall: 6 },
+    { label: "23/24", division: 7, leaguePos: 8, roddyPos: 9, facupPos: 10, eclPos: 11, overall: 12 },
+    { label: "24/25", division: 13, leaguePos: 14, roddyPos: 15, facupPos: 16, eclPos: 17, overall: 18 },
+    { label: "25/26", division: 19, leaguePos: 20, roddyPos: 21, facupPos: 22, eclPos: 23, overall: 24 }
   ]
 };
 
 let historicalDebug = {};
 
 function findHistoricalRecords(rows, teamName){
-  historicalDebug = { rowsScanned: 0, matchedRow: -1, headerRow: -1, divCol: -1 };
+  historicalDebug = { rowsScanned: 0, matchedRow: -1 };
+  historicalDebug.rawRowDump = rows.slice(0, 4).map((row, r) =>
+    "row" + r + ": " + (row||[]).map((c,ci)=> (ci<=26&&c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
+  );
 
-  // Search for the actual 6-column header sequence (DIVISION, POS, RODDY, FA CUP,
-  // ECL, OVERALL appearing consecutively) rather than a title, since the title text
-  // turned out to match a different, smaller leftover table elsewhere in the sheet.
-  let headerRow = -1, divCol = -1;
-  for(let r=0; r<rows.length && headerRow === -1; r++){
-    for(let c=100; c<=160; c++){
-      if((cell(rows[r]||[], c)||"").trim().toUpperCase() === "DIVISION" &&
-         (cell(rows[r]||[], c+1)||"").trim().toUpperCase() === "POS" &&
-         (cell(rows[r]||[], c+2)||"").trim().toUpperCase() === "RODDY"){
-        headerRow = r; divCol = c;
-        break;
-      }
-    }
-  }
-  historicalDebug.headerRow = headerRow;
-  historicalDebug.divCol = divCol;
-
-  if(headerRow === -1){
-    historicalDebug.rawRowDump = rows.slice(125, 150).map((row, i) =>
-      "row" + (125+i) + ": " + (row||[]).map((c,ci)=> (ci>=105&&ci<=160&&c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
-    );
-    return [];
-  }
-
-  // The 25/26 block's DIVISION column is now confirmed at divCol; the three earlier
-  // seasons sit at fixed 6-column intervals to the left of it.
-  const seasons = [
-    { label: "22/23", offset: -18 },
-    { label: "23/24", offset: -12 },
-    { label: "24/25", offset: -6 },
-    { label: "25/26", offset: 0 }
-  ].map(s => ({
-    label: s.label,
-    division: divCol + s.offset,
-    leaguePos: divCol + s.offset + 1,
-    roddyPos: divCol + s.offset + 2,
-    facupPos: divCol + s.offset + 3,
-    eclPos: divCol + s.offset + 4,
-    overall: divCol + s.offset + 5
-  }));
-  historicalDebug.seasons = seasons;
-
-  for(let r=headerRow+1; r<rows.length; r++){
+  for(let r=0; r<rows.length; r++){
     const team = cell(rows[r]||[], HIST_COL.TEAM);
     if(!team) continue;
     historicalDebug.rowsScanned++;
     if(team.toUpperCase() === teamName.toUpperCase()){
       historicalDebug.matchedRow = r;
-      const records = seasons.map(s => ({
+      const records = HIST_COL.SEASONS.map(s => ({
         season: s.label,
         division: cell(rows[r]||[], s.division),
         leaguePos: cell(rows[r]||[], s.leaguePos),
@@ -2994,7 +2962,6 @@ function findHistoricalRecords(rows, teamName){
         overall: cell(rows[r]||[], s.overall)
       }));
       historicalDebug.allSeasonsRaw = records;
-      historicalDebug.matchedRowFullDump = (rows[r]||[]).map((c, ci) => (ci >= 105 && ci <= 145 && c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ");
       const filtered = records.filter(rec => rec.division || rec.leaguePos);
       return filtered.reverse();
     }
