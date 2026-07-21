@@ -183,6 +183,18 @@
   .home-champ-team{font-family:'Barlow Condensed',sans-serif;font-size:21px;font-weight:700;line-height:1.2;margin-top:5px;}
   .home-champ-season{font-family:'Barlow',sans-serif;font-size:11.5px;opacity:0.75;margin-top:5px;}
 
+  /* Split competitions (Division 2 -> 2A/2B, Division 3 -> 3A/3B): two half-size cards
+     side by side, occupying a single slot in the champions grid. */
+  .home-champ-split{display:flex;gap:8px;}
+  .home-champ-half{padding:14px 8px 12px;min-width:0;}
+  .home-champ-half .home-champ-logo{width:40px;height:40px;margin-bottom:8px;}
+  .home-champ-half .home-champ-comp{font-size:9px;}
+  .home-champ-half .home-champ-team{font-size:14px;margin-top:3px;}
+  .home-champ-half .home-champ-season{font-size:10px;margin-top:3px;}
+  @media (max-width:420px){
+    .home-champ-split{flex-direction:column;}
+  }
+
   /* ---------- Team profile header ---------- */
   .team-profile-top{
     display:flex;align-items:center;gap:28px;margin-bottom:28px;justify-content:space-between;
@@ -308,6 +320,18 @@
   table.standings.compact .badge{width:20px;height:20px;font-size:8px;}
   table.standings.compact .form-pill{width:15px;height:15px;font-size:9px;}
 
+  /* ECL group tables (A/B/C): fix the Team column to the same width across all three
+     independent tables, so Pts (and every column after it) lines up at the same
+     horizontal position regardless of which group has the longest team name. */
+  table.ecl-group-table th:nth-child(2), table.ecl-group-table td:nth-child(2){
+    width:150px; min-width:150px; max-width:150px; white-space:normal; word-break:break-word;
+  }
+  @media (max-width:600px){
+    table.ecl-group-table th:nth-child(2), table.ecl-group-table td:nth-child(2){
+      width:110px; min-width:110px; max-width:110px;
+    }
+  }
+
   /* Roddy leaderboard: keep the first 6 columns (Pos/Team/Division/Round/Chip/Total)
      compact enough to fit on mobile without scrolling; Chip1-4/Overall scroll into view. */
   table.roddy-table{border-collapse:collapse; width:auto; min-width:0;}
@@ -327,6 +351,32 @@
     table.roddy-table th:nth-child(1), table.roddy-table td:nth-child(1){padding-left:8px; padding-right:3px;}
   }
   td.next-opp{font-size:11.5px;color:#5a6a63;white-space:nowrap;}
+
+  /* Team vs Team (Head-to-Head vs Opponent) custom dropdown — a native <select> can't
+     render coloured division pills inside its options, so this is a button + toggled
+     list styled to match the rest of the site's form controls. */
+  .tvt-select-wrap{position:relative;margin-bottom:14px;}
+  .tvt-select-toggle{
+    width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:9px 12px;border:1px solid var(--line-light);border-radius:5px;
+    font-family:'Barlow',sans-serif;font-size:14px;background:#fff;color:var(--ink);
+    cursor:pointer;box-sizing:border-box;
+  }
+  .tvt-select-toggle:hover{border-color:var(--pitch);}
+  .tvt-select-arrow{color:#6b7c73;font-size:11px;flex-shrink:0;}
+  .tvt-select-menu{
+    position:absolute;top:calc(100% + 4px);left:0;right:0;max-height:280px;overflow-y:auto;
+    background:#fff;border:1px solid var(--line-light);border-radius:5px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.14);z-index:20;
+  }
+  .tvt-select-option{
+    display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;
+    font-family:'Barlow',sans-serif;font-size:13.5px;color:var(--ink);
+  }
+  .tvt-select-option:hover{background:#F0EAD8;}
+  .tvt-select-option.inactive{opacity:0.6;}
+  .tvt-select-option .roddy-div-tag{flex-shrink:0;min-width:26px;text-align:center;}
+  .tvt-select-option-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
   .badge{
     display:inline-flex;align-items:center;justify-content:center;
@@ -526,7 +576,6 @@
     table.trophy-table{min-width:0;}
     table.trophy-table thead th{padding:5px 6px;font-size:8.5px;}
     table.trophy-table tbody td{padding:5px 6px;font-size:11.5px;}
-    table.trophy-table thead th:first-child, table.trophy-table tbody td:first-child{width:auto;padding-left:6px;}
     table.history-table{min-width:0;}
     table.history-table thead th{padding:5px 6px;font-size:8.5px;}
     table.history-table tbody td{padding:5px 6px;font-size:11.5px;}
@@ -545,11 +594,30 @@
   }
   table.ecl-qual-table .status-short{display:none;}
 
-  table.trophy-table thead th:first-child, table.trophy-table tbody td:first-child{
-    width:auto; white-space:nowrap; text-align:left; padding-left:12px; font-weight:600; color:var(--ink);
+  /* Trophy Leaders: Team is column 1 here (there's no separate Pos column like the
+     standings tables have), so lock it in place with an explicit width and opaque
+     background while the ten trophy columns scroll underneath. */
+  table.trophy-table thead th:first-child,
+  table.trophy-table tbody td:first-child{
+    position:sticky;
+    left:0;
+    z-index:3;
+    width:140px; min-width:140px; max-width:140px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    text-align:left; padding-left:12px; font-weight:600;
+  }
+  table.trophy-table tbody td:first-child{
+    background-color:inherit;
+    color:var(--ink);
   }
   table.trophy-table tbody td:nth-child(n+2){text-align:center;font-weight:400;padding-left:8px;}
   table.trophy-table{min-width:auto;}
+  @media (max-width:600px){
+    table.trophy-table thead th:first-child,
+    table.trophy-table tbody td:first-child{
+      width:100px; min-width:100px; max-width:100px;
+    }
+  }
   table.home-mini-table{min-width:0;}
   table.h2h-record-table{min-width:0;width:100%;}
   table.h2h-record-table thead th:first-child{width:auto;padding-left:10px;}
@@ -2025,7 +2093,7 @@ function eclGroupTableHtml(g){
   let html = `<div class="section-head" style="margin-top:28px;">
       <h3 style="font-family:'Barlow Condensed',sans-serif;font-size:20px;margin:0;letter-spacing:0.02em;">${g.label}</h3>
     </div>
-    <div class="table-wrap"><table class="standings compact"><thead><tr>
+    <div class="table-wrap"><table class="standings compact ecl-group-table"><thead><tr>
       <th>Pos</th><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th>
       <th>Pts+</th><th>Pts-</th><th>Diff</th><th>MD1</th><th>MD2</th><th>MD3</th><th>Next</th><th>Status</th>
     </tr></thead><tbody>`;
@@ -2140,9 +2208,9 @@ function eclFixturesHtml(){
         const isDraw = played && f.homeScore === f.awayScore;
         const resultColor = (won) => !played ? "#F5F5F0" : won ? "#4ADE80" : isDraw ? "#FBBF24" : "#F87171";
         html += `<div style="background:#1c1c1c;border:1px solid #333;border-radius:6px;padding:10px 14px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;">
-          <span style="text-align:right;font-size:13px;overflow-wrap:break-word;color:${resultColor(homeWon)};font-weight:${homeWon ? "700" : "400"};">${teamLink(f.home)}</span>
+          <span style="display:block;min-width:0;text-align:right;font-size:13px;overflow-wrap:break-word;word-break:break-word;color:${resultColor(homeWon)};font-weight:${homeWon ? "700" : "400"};">${teamLink(f.home)}</span>
           <span style="font-weight:700;color:#ffdd00;white-space:nowrap;">${scoreText}</span>
-          <span style="text-align:left;font-size:13px;overflow-wrap:break-word;color:${resultColor(awayWon)};font-weight:${awayWon ? "700" : "400"};">${teamLink(f.away)}</span>
+          <span style="display:block;min-width:0;text-align:left;font-size:13px;overflow-wrap:break-word;word-break:break-word;color:${resultColor(awayWon)};font-weight:${awayWon ? "700" : "400"};">${teamLink(f.away)}</span>
         </div>`;
       });
       html += `</div>`;
@@ -2227,9 +2295,9 @@ function eclFixtureCardHtml(f){
   const isDraw = played && f.homeScore === f.awayScore;
   const resultColor = (won) => !played ? "#F5F5F0" : won ? "#4ADE80" : isDraw ? "#FBBF24" : "#F87171";
   return `<div style="background:#1c1c1c;border:1px solid #333;border-radius:6px;padding:10px 14px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;">
-    <span style="text-align:right;font-size:13px;overflow-wrap:break-word;color:${resultColor(homeWon)};font-weight:${homeWon ? "700" : "400"};">${teamLink(f.home)}</span>
+    <span style="display:block;min-width:0;text-align:right;font-size:13px;overflow-wrap:break-word;word-break:break-word;color:${resultColor(homeWon)};font-weight:${homeWon ? "700" : "400"};">${teamLink(f.home)}</span>
     <span style="font-weight:700;color:#ffdd00;white-space:nowrap;">${scoreText}</span>
-    <span style="text-align:left;font-size:13px;overflow-wrap:break-word;color:${resultColor(awayWon)};font-weight:${awayWon ? "700" : "400"};">${teamLink(f.away)}</span>
+    <span style="display:block;min-width:0;text-align:left;font-size:13px;overflow-wrap:break-word;word-break:break-word;color:${resultColor(awayWon)};font-weight:${awayWon ? "700" : "400"};">${teamLink(f.away)}</span>
   </div>`;
 }
 
@@ -3038,12 +3106,20 @@ function findTeamVsTeamRecords(rows, teamName){
     // Sheet stores every name here in ALL CAPS — prefer the opponent's proper-case
     // name from the Roddy leaderboard (already loaded by this point in loadTeamProfile),
     // falling back to a simple title-case of the raw text if it's ever not found there.
+    // A team not found there at all isn't currently entered in any division — flagged
+    // as inactive so the dropdown can push it to the bottom instead of mixing it in.
     const roddyMatch = roddyEntries.find(e => (e.team||"").toUpperCase() === t2.toUpperCase());
     const display = roddyMatch ? roddyMatch.team : titleCaseFallback(t2);
+    const active = !!roddyMatch;
+    const divShort = active ? getDivisionShortLabel(roddyMatch.division) : "N/A";
+    const divColor = active ? getDivisionColorByLabel(roddyMatch.division) : "#8a9990";
 
     opponents.push({
       key: t2.toUpperCase(),
       display,
+      active,
+      divShort,
+      divColor,
       p: cell(rows[r]||[], TVT_COL.P),
       w: cell(rows[r]||[], TVT_COL.W),
       l: cell(rows[r]||[], TVT_COL.L),
@@ -3058,7 +3134,15 @@ function findTeamVsTeamRecords(rows, teamName){
     "row" + i + ": " + (row||[]).map((c,ci)=> (ci<=20&&c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
   );
 
-  opponents.sort((a,b) => a.display.localeCompare(b.display));
+  // Active teams first, grouped by division in league order; inactive (not currently
+  // in any division) pushed to the bottom; alphabetical by name within each group.
+  const DIV_SORT_ORDER = { "D1": 0, "2A": 1, "2B": 2, "3A": 3, "3B": 4 };
+  opponents.sort((a,b) => {
+    const orderA = a.active ? (DIV_SORT_ORDER[a.divShort] ?? 5) : 99;
+    const orderB = b.active ? (DIV_SORT_ORDER[b.divShort] ?? 5) : 99;
+    if(orderA !== orderB) return orderA - orderB;
+    return a.display.localeCompare(b.display);
+  });
   return opponents;
 }
 
@@ -3110,17 +3194,29 @@ function tvtResultHtml(opp){
 
 function teamVsTeamSectionHtml(teamName, opponents){
   if(!opponents || !opponents.length) return "";
-  const options = opponents.map(o => `<option value="${o.key}">${o.display}</option>`).join("");
+  const optionRow = (o) => `<div class="tvt-select-option${o.active ? "" : " inactive"}" data-key="${o.key}">
+      <span class="roddy-div-tag" style="background:${o.divColor};">${o.divShort}</span>
+      <span class="tvt-select-option-name">${o.display}</span>
+    </div>`;
+  const first = opponents[0];
   return `<div class="section-head" style="margin-top:32px;"><h2 style="font-size:18px;">Head-to-Head vs Opponent</h2></div>
     <div style="max-width:480px;">
       <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;margin-bottom:10px;">
         ${teamName} <span style="color:#6b7c73;font-weight:400;">v</span>
       </div>
-      <select id="tvtOpponentSelect" style="width:100%;padding:9px 12px;border:1px solid var(--line-light);border-radius:5px;
-        font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:14px;box-sizing:border-box;background:#fff;">
-        ${options}
-      </select>
-      <div id="tvtOpponentResult"></div>
+      <div class="tvt-select-wrap">
+        <button type="button" id="tvtOpponentToggle" class="tvt-select-toggle">
+          <span style="display:flex;align-items:center;gap:8px;min-width:0;">
+            <span class="roddy-div-tag" id="tvtOpponentToggleTag" style="background:${first.divColor};">${first.divShort}</span>
+            <span id="tvtOpponentToggleLabel" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${first.display}</span>
+          </span>
+          <span class="tvt-select-arrow">▾</span>
+        </button>
+        <div id="tvtOpponentMenu" class="tvt-select-menu" style="display:none;">
+          ${opponents.map(optionRow).join("")}
+        </div>
+      </div>
+      <div id="tvtOpponentResult" style="margin-top:14px;"></div>
     </div>`;
 }
 
@@ -3315,14 +3411,38 @@ function renderTeamProfile(data){
   container.innerHTML = html;
 
   if(teamVsTeamOpponents && teamVsTeamOpponents.length){
-    const select = document.getElementById('tvtOpponentSelect');
+    const toggle = document.getElementById('tvtOpponentToggle');
+    const toggleLabel = document.getElementById('tvtOpponentToggleLabel');
+    const toggleTag = document.getElementById('tvtOpponentToggleTag');
+    const menu = document.getElementById('tvtOpponentMenu');
     const resultEl = document.getElementById('tvtOpponentResult');
+
     const showOpponent = (key) => {
       const opp = teamVsTeamOpponents.find(o => o.key === key);
-      resultEl.innerHTML = opp ? tvtResultHtml(opp) : "";
+      if(!opp) return;
+      toggleLabel.textContent = opp.display;
+      toggleTag.textContent = opp.divShort;
+      toggleTag.style.background = opp.divColor;
+      resultEl.innerHTML = tvtResultHtml(opp);
     };
-    select.addEventListener('change', () => showOpponent(select.value));
-    showOpponent(select.value);
+
+    toggle.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+    });
+    menu.querySelectorAll('.tvt-select-option').forEach(opt=>{
+      opt.addEventListener('click', ()=>{
+        showOpponent(opt.dataset.key);
+        menu.style.display = 'none';
+      });
+    });
+    document.addEventListener('click', (e)=>{
+      if(!menu.contains(e.target) && e.target !== toggle && !toggle.contains(e.target)){
+        menu.style.display = 'none';
+      }
+    });
+
+    showOpponent(teamVsTeamOpponents[0].key);
   }
 }
 
@@ -3360,12 +3480,48 @@ const HOME_ICON_CALENDAR = `<svg viewBox="0 0 24 24" width="26" height="26" fill
 const HOME_ICON_TROPHY = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 5H4a3 3 0 0 0 3 4"/><path d="M16 5h4a3 3 0 0 1-3 4"/><line x1="12" y1="13" x2="12" y2="17"/><path d="M8 21h8"/><path d="M9 17h6l1 4H8l1-4z"/></svg>`;
 const HOME_ICON_TEAMS = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="8.5" r="2.4"/><path d="M15.5 14.7c2.5.3 4.5 2.2 4.5 5.3"/></svg>`;
 
+// Some competitions (Division 2, Division 3) split into sub-divisions in more recent
+// seasons, and the sheet stores both winners in one cell for that season, e.g.
+// "Harvey Frekes (2A - 1st), Jarvis Zebras (2B - 2nd)". Extract each "Team (LABEL -
+// place)" segment; if the string doesn't match that split format (older, un-split
+// seasons like "DW About It FC (1st)"), fall back to treating it as a single entry.
+function parseHonourEntries(winnerStr){
+  const entries = [];
+  const re = /([^,()]+?)\s*\(([^()]*?)\s*-\s*([^()]*?)\)/g;
+  let m;
+  while((m = re.exec(winnerStr))){
+    entries.push({ team: m[1].trim(), label: m[2].trim(), place: m[3].trim() });
+  }
+  if(entries.length === 0){
+    entries.push({ team: winnerStr.replace(/\s*\([^)]*\)\s*$/, "").trim(), label: "", place: "" });
+  }
+  return entries;
+}
+
 function homeReigningChampionHtml(compName){
   const comp = HONOUR_ROLL[compName];
   if(!comp || !comp.winners.length) return "";
   const [season, winner] = comp.winners[0];
   const fg = comp.textColor || "#fff";
-  const teamName = winner.replace(/\s*\([^)]*\)\s*$/, "").trim(); // strip trailing "(1st)" etc for the logo slug
+  const entries = parseHonourEntries(winner);
+
+  if(entries.length >= 2){
+    // Split competition this season — two half-size cards side by side in one grid slot.
+    const cards = entries.slice(0, 2).map(e=>{
+      const teamDisplay = e.place ? `${e.team} (${e.place})` : e.team;
+      const compLabel = e.label ? `${compName} · ${e.label}` : compName;
+      const logoOnError = `if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${teamPlaceholderLogoDataUri(e.team)}';}`;
+      return `<div class="home-champ home-champ-half" style="background:${comp.color};color:${fg};">
+        <img src="logo/${teamLogoSlug(e.team)}.png" alt="" class="home-champ-logo" onerror="${logoOnError}">
+        <div class="home-champ-comp">${compLabel}</div>
+        <div class="home-champ-team">${teamDisplay}</div>
+        <div class="home-champ-season">${season}</div>
+      </div>`;
+    }).join("");
+    return `<div class="home-champ-split">${cards}</div>`;
+  }
+
+  const teamName = entries[0].team; // stripped of trailing "(1st)" etc for the logo slug
   const logoOnError = `if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${teamPlaceholderLogoDataUri(teamName)}';}`;
   return `<div class="home-champ" style="background:${comp.color};color:${fg};">
     <img src="logo/${teamLogoSlug(teamName)}.png" alt="" class="home-champ-logo" onerror="${logoOnError}">
