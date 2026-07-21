@@ -3074,12 +3074,25 @@ function tvtMatchRowHtml(m){
   const result = (m.result||"").toUpperCase();
   const cls = result === "WIN" ? "form-w" : result === "LOSS" ? "form-l" : result === "DRAW" ? "form-d" : "form-blank";
   const short = result === "WIN" ? "W" : result === "LOSS" ? "L" : result === "DRAW" ? "D" : "";
-  return `<div style="display:grid;grid-template-columns:1fr 46px 22px auto;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-light);">
-    <span style="font-family:'Barlow',sans-serif;font-size:13px;">${m.comp || "—"} <span style="color:#6b7c73;">${m.year || ""}</span></span>
-    <span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:#6b7c73;text-align:right;">${m.round || ""}</span>
-    ${short ? `<span class="form-pill ${cls}">${short}</span>` : `<span></span>`}
-    <span style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;">${m.for || "—"} – ${m.against || "—"}</span>
-  </div>`;
+  return `<tr>
+    <td style="text-align:left;">${m.comp || "—"}</td>
+    <td>${m.year || "—"}</td>
+    <td>${m.round || "—"}</td>
+    <td>${short ? `<span class="form-pill ${cls}">${short}</span>` : "—"}</td>
+    <td>${m.for || "—"}</td>
+    <td>${m.against || "—"}</td>
+  </tr>`;
+}
+
+function tvtMatchesTableHtml(matches){
+  if(!matches.length){
+    return `<p style="font-family:'Barlow',sans-serif;font-size:13px;color:#6b7c73;">These two teams haven't played each other yet.</p>`;
+  }
+  return `<div class="table-wrap" style="max-width:460px;"><table class="standings compact h2h-record-table"><thead><tr>
+      <th style="text-align:left;">Comp</th><th>Year</th><th>Round</th><th>Result</th><th>For</th><th>Aga</th>
+    </tr></thead><tbody>
+      ${matches.map(tvtMatchRowHtml).join("")}
+    </tbody></table></div>`;
 }
 
 function tvtResultHtml(opp){
@@ -3092,17 +3105,18 @@ function tvtResultHtml(opp){
       </div>
       ${streakBadge}
     </div>`;
-  html += opp.matches.length
-    ? opp.matches.map(tvtMatchRowHtml).join("")
-    : `<p style="font-family:'Barlow',sans-serif;font-size:13px;color:#6b7c73;">These two teams haven't played each other yet.</p>`;
+  html += tvtMatchesTableHtml(opp.matches);
   return html;
 }
 
-function teamVsTeamSectionHtml(opponents){
+function teamVsTeamSectionHtml(teamName, opponents){
   if(!opponents || !opponents.length) return "";
   const options = opponents.map(o => `<option value="${o.key}">${o.display}</option>`).join("");
   return `<div class="section-head" style="margin-top:32px;"><h2 style="font-size:18px;">Head-to-Head vs Opponent</h2></div>
     <div style="max-width:480px;">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;margin-bottom:10px;">
+        ${teamName} <span style="color:#6b7c73;font-weight:400;">v</span>
+      </div>
       <select id="tvtOpponentSelect" style="width:100%;padding:9px 12px;border:1px solid var(--line-light);border-radius:5px;
         font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:14px;box-sizing:border-box;background:#fff;">
         ${options}
@@ -3266,7 +3280,7 @@ function renderTeamProfile(data){
   // Historical Record
   html += historicalRecordHtml(historicalRecords);
   html += h2hRecordHtml(h2hRecords);
-  html += teamVsTeamSectionHtml(teamVsTeamOpponents);
+  html += teamVsTeamSectionHtml(teamName, teamVsTeamOpponents);
 
   container.innerHTML = html;
 
