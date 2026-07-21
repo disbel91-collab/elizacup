@@ -3111,11 +3111,17 @@ function findTeamVsTeamRecords(rows, teamName){
     // non-empty cell with its column index so we can see exactly where it actually
     // lands — the FOR/AGA offsets we assume (base+4/base+5) might not be where it is.
     const rawRow = rows[r]||[];
-    if(rawRow.some(c => (c||"").toString().includes("*"))){
-      if(!teamVsTeamDebug.asteriskRows) teamVsTeamDebug.asteriskRows = [];
-      teamVsTeamDebug.asteriskRows.push({
+    const pVal = cell(rawRow, TVT_COL.P);
+    const flagged = rawRow.some(c => (c||"").toString().includes("*"))
+      || (pVal && parseInt(pVal,10) !== matches.length) // P total disagrees with rows actually parsed
+      || t2.toUpperCase().includes("ZEN GARDEN"); // always capture this known example row too
+    if(flagged){
+      if(!teamVsTeamDebug.flaggedRows) teamVsTeamDebug.flaggedRows = [];
+      teamVsTeamDebug.flaggedRows.push({
         row: r,
         opponent: t2,
+        sheetP: pVal,
+        parsedMatchCount: matches.length,
         parsedMatches: matches,
         rawNonEmptyCells: rawRow.map((c,ci)=> (c!==undefined && c!==null && c.toString().trim()!=="") ? `[${ci}]="${c.toString().trim()}"` : null).filter(Boolean)
       });
