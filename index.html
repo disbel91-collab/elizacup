@@ -1050,7 +1050,8 @@ async function load(){
       await loadTeamProfile(currentDivision.teamName);
       document.getElementById('debugOut').textContent =
         "Historical debug: " + JSON.stringify(historicalDebug, null, 2) + "\n\n" +
-        "H2H record debug: " + JSON.stringify(h2hRecordsDebug, null, 2);
+        "H2H record debug: " + JSON.stringify(h2hRecordsDebug, null, 2) + "\n\n" +
+        "Team vs Team debug: " + JSON.stringify(teamVsTeamDebug, null, 2);
       setStatus("Live — updated " + new Date().toLocaleString());
     }catch(err){
       console.error(err);
@@ -2831,8 +2832,17 @@ async function loadTeamProfile(teamName){
     })
   );
 
+  const teamVsTeamDiv = { gid: "1560134779" };
+  let teamVsTeamOpponents = [];
+  fetches.push(
+    fetch(csvUrlFor(teamVsTeamDiv)).then(r => r.text()).then(text => {
+      const rows = Papa.parse(text, {skipEmptyLines:false}).data;
+      teamVsTeamOpponents = findTeamVsTeamRecords(rows, teamName);
+    })
+  );
+
   await Promise.all(fetches);
-  renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords });
+  renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords, teamVsTeamOpponents });
 }
 
 // ---------- Historical Record (dedicated tab, gid 1444343417) ----------
@@ -2978,6 +2988,129 @@ function h2hRecordHtml(records){
   return html;
 }
 
+// ---------- Team vs Team Head-to-Head (dedicated tab, gid 1560134779) ----------
+// Column A = Team 1 (repeated across a whole block), B = Team 2 (opponent), C:F =
+// P/WIN/LOSS/DRAW, G = "STREAK" flag (only populated when a 3-game win streak is
+// active), H onward = repeating 6-column match blocks (COMP/YEAR/ROUND/RESULT/FOR/AGA),
+// oldest to newest, one block per match actually played — however many that is.
+// Each Team 1 gets one row per every other team in the league (~88-90 rows): a leading
+// self-row (Team 2 = Team 1, safe to skip) and a trailing blank-opponent TOTAL row
+// (also skipped) bookend the real opponent rows.
+const TVT_COL = { TEAM1: 0, TEAM2: 1, P: 2, W: 3, L: 4, D: 5, STREAK: 6 };
+const TVT_MATCH_START = 7;
+const TVT_MATCH_WIDTH = 6;
+const TVT_MAX_MATCHES = 40; // generous ceiling — content-based stop (blank COMP+YEAR) does the real work
+
+let teamVsTeamDebug = {};
+
+function titleCaseFallback(name){
+  return (name||"").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function findTeamVsTeamRecords(rows, teamName){
+  teamVsTeamDebug = { rowsScanned: 0, opponentsFound: 0 };
+  const upperTeam = teamName.toUpperCase();
+  const opponents = [];
+
+  for(let r=0; r<rows.length; r++){
+    const t1 = cell(rows[r]||[], TVT_COL.TEAM1);
+    if(!t1 || t1.toUpperCase() !== upperTeam) continue;
+    teamVsTeamDebug.rowsScanned++;
+
+    const t2 = cell(rows[r]||[], TVT_COL.TEAM2);
+    if(!t2) continue;                          // blank-opponent TOTAL row
+    if(t2.toUpperCase() === upperTeam) continue; // self row
+
+    const matches = [];
+    for(let b=0; b<TVT_MAX_MATCHES; b++){
+      const base = TVT_MATCH_START + b*TVT_MATCH_WIDTH;
+      const comp = cell(rows[r]||[], base);
+      const year = cell(rows[r]||[], base+1);
+      if(!comp && !year) break;
+      matches.push({
+        comp, year,
+        round: cell(rows[r]||[], base+2),
+        result: cell(rows[r]||[], base+3),
+        for: cell(rows[r]||[], base+4),
+        against: cell(rows[r]||[], base+5)
+      });
+    }
+
+    // Sheet stores every name here in ALL CAPS — prefer the opponent's proper-case
+    // name from the Roddy leaderboard (already loaded by this point in loadTeamProfile),
+    // falling back to a simple title-case of the raw text if it's ever not found there.
+    const roddyMatch = roddyEntries.find(e => (e.team||"").toUpperCase() === t2.toUpperCase());
+    const display = roddyMatch ? roddyMatch.team : titleCaseFallback(t2);
+
+    opponents.push({
+      key: t2.toUpperCase(),
+      display,
+      p: cell(rows[r]||[], TVT_COL.P),
+      w: cell(rows[r]||[], TVT_COL.W),
+      l: cell(rows[r]||[], TVT_COL.L),
+      d: cell(rows[r]||[], TVT_COL.D),
+      streak: cell(rows[r]||[], TVT_COL.STREAK),
+      matches
+    });
+  }
+
+  teamVsTeamDebug.opponentsFound = opponents.length;
+  teamVsTeamDebug.rawRowDump = rows.slice(0, 3).map((row, i) =>
+    "row" + i + ": " + (row||[]).map((c,ci)=> (ci<=20&&c) ? `[${ci}]="${(c||"").toString().trim()}"` : "").filter(Boolean).join(" ")
+  );
+
+  opponents.sort((a,b) => a.display.localeCompare(b.display));
+  return opponents;
+}
+
+function tvtStatBox(label, value){
+  return `<div style="background:#fff;border:1px solid var(--line-light);border-radius:5px;padding:8px 14px;text-align:center;min-width:52px;">
+    <div style="font-family:'Barlow',sans-serif;font-size:10px;color:#6b7c73;text-transform:uppercase;letter-spacing:0.05em;">${label}</div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;">${value}</div>
+  </div>`;
+}
+
+function tvtMatchRowHtml(m){
+  const result = (m.result||"").toUpperCase();
+  const cls = result === "WIN" ? "form-w" : result === "LOSS" ? "form-l" : result === "DRAW" ? "form-d" : "form-blank";
+  const short = result === "WIN" ? "W" : result === "LOSS" ? "L" : result === "DRAW" ? "D" : "";
+  return `<div style="display:grid;grid-template-columns:1fr 46px 22px auto;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-light);">
+    <span style="font-family:'Barlow',sans-serif;font-size:13px;">${m.comp || "—"} <span style="color:#6b7c73;">${m.year || ""}</span></span>
+    <span style="font-family:'Barlow Condensed',sans-serif;font-size:12px;color:#6b7c73;text-align:right;">${m.round || ""}</span>
+    ${short ? `<span class="form-pill ${cls}">${short}</span>` : `<span></span>`}
+    <span style="font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;">${m.for || "—"} – ${m.against || "—"}</span>
+  </div>`;
+}
+
+function tvtResultHtml(opp){
+  const streakBadge = opp.streak
+    ? `<span style="display:inline-block;background:#ffdd00;color:#111;font-family:'Barlow',sans-serif;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;padding:3px 8px;border-radius:10px;">🔥 ${opp.streak}</span>`
+    : "";
+  let html = `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin-bottom:14px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${tvtStatBox("P", opp.p || "0")}${tvtStatBox("W", opp.w || "0")}${tvtStatBox("L", opp.l || "0")}${tvtStatBox("D", opp.d || "0")}
+      </div>
+      ${streakBadge}
+    </div>`;
+  html += opp.matches.length
+    ? opp.matches.map(tvtMatchRowHtml).join("")
+    : `<p style="font-family:'Barlow',sans-serif;font-size:13px;color:#6b7c73;">These two teams haven't played each other yet.</p>`;
+  return html;
+}
+
+function teamVsTeamSectionHtml(opponents){
+  if(!opponents || !opponents.length) return "";
+  const options = opponents.map(o => `<option value="${o.key}">${o.display}</option>`).join("");
+  return `<div class="section-head" style="margin-top:32px;"><h2 style="font-size:18px;">Head-to-Head vs Opponent</h2></div>
+    <div style="max-width:480px;">
+      <select id="tvtOpponentSelect" style="width:100%;padding:9px 12px;border:1px solid var(--line-light);border-radius:5px;
+        font-family:'Barlow',sans-serif;font-size:14px;margin-bottom:14px;box-sizing:border-box;background:#fff;">
+        ${options}
+      </select>
+      <div id="tvtOpponentResult"></div>
+    </div>`;
+}
+
 function resultPillRow(label, opponent, isHome, homeScore, awayScore, played){
   const scoreText = played ? `${homeScore} – ${awayScore}` : (opponent ? "vs" : "");
   let result = "";
@@ -3061,7 +3194,7 @@ function teamLogoSlug(name){
 function renderTeamProfile(data){
   const container = document.getElementById('teamProfileContainer');
   container.className = "";
-  const { teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords } = data;
+  const { teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords, teamVsTeamOpponents } = data;
 
   if(!roddyEntry && !divisionData){
     container.innerHTML = `<div class="state-msg error">Couldn't find "${teamName}" anywhere in the league. Check the Debug panel below.</div>`;
@@ -3133,8 +3266,20 @@ function renderTeamProfile(data){
   // Historical Record
   html += historicalRecordHtml(historicalRecords);
   html += h2hRecordHtml(h2hRecords);
+  html += teamVsTeamSectionHtml(teamVsTeamOpponents);
 
   container.innerHTML = html;
+
+  if(teamVsTeamOpponents && teamVsTeamOpponents.length){
+    const select = document.getElementById('tvtOpponentSelect');
+    const resultEl = document.getElementById('tvtOpponentResult');
+    const showOpponent = (key) => {
+      const opp = teamVsTeamOpponents.find(o => o.key === key);
+      resultEl.innerHTML = opp ? tvtResultHtml(opp) : "";
+    };
+    select.addEventListener('change', () => showOpponent(select.value));
+    showOpponent(select.value);
+  }
 }
 
 // ---------- Home page ----------
