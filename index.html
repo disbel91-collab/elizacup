@@ -1909,15 +1909,14 @@ const ECL_QUAL_COL = {
   PTS_PLUS: 9, RODDY: 10, STATUS: 11
 };
 
-function findStatusText(row){
-  // Direct read first now that the column is a plain single cell; fall back to a
-  // short keyword scan either side in case of any residual drift.
-  const direct = cell(row, ECL_QUAL_COL.STATUS);
-  if(direct) return direct;
-  for(let c=ECL_QUAL_COL.STATUS-2; c<=ECL_QUAL_COL.STATUS+4; c++){
-    const v = cell(row, c);
-    if(v && /BYE|SEMI|QUARTER|FINAL|ADVANCE|ELIMINAT/i.test(v)) return v;
-  }
+// Status text ("Semi Final" for the top 2 seeds who get a bye, "Quarter Final" for
+// seeds 3-6) is hardwired off position rather than read from the sheet — the sheet's
+// own status column for this table couldn't be reliably located, but the top-2/next-4
+// split is a fixed rule of the competition format, not something that varies week to
+// week, so deriving it is both simpler and more reliable than parsing it.
+function eclQualifierStatusForPos(pos){
+  if(pos === 1 || pos === 2) return "Semi Final";
+  if(pos >= 3 && pos <= 6) return "Quarter Final";
   return "";
 }
 
@@ -1973,7 +1972,7 @@ function parseECLQualifiers(rows){
       pts: cell(rows[r]||[], ECL_QUAL_COL.PTS),
       ptsFor: cell(rows[r]||[], ECL_QUAL_COL.PTS_PLUS),
       roddy: cell(rows[r]||[], ECL_QUAL_COL.RODDY),
-      status: findStatusText(rows[r]||[])
+      status: eclQualifierStatusForPos(parseInt(posRaw,10))
     });
   }
 }
@@ -3205,6 +3204,37 @@ function teamLogoSlug(name){
     .replace(/^-+|-+$/g, "");
 }
 
+// ---------- Placeholder team logo (solid colour + initials) ----------
+// Used as the fallback whenever a team doesn't have an uploaded logo/{slug}.png file
+// yet — a small generated SVG avatar instead of a shared generic image, so every team
+// without a logo still looks distinct. Colour is picked deterministically from the
+// team name (same team always gets the same colour) out of the site's brand palette.
+function teamInitials(name){
+  const words = (name||"").trim().split(/\s+/).filter(Boolean);
+  if(words.length === 0) return "?";
+  if(words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+const PLACEHOLDER_LOGO_COLORS = ["#28427c", "#bc3532", "#990000", "#6aa84f", "#274e13", "#0a2f85"];
+function placeholderColorForTeam(name){
+  let hash = 0;
+  for(let i=0; i<(name||"").length; i++){ hash = (hash * 31 + name.charCodeAt(i)) >>> 0; }
+  return PLACEHOLDER_LOGO_COLORS[hash % PLACEHOLDER_LOGO_COLORS.length];
+}
+
+function teamPlaceholderLogoDataUri(name){
+  const initials = teamInitials(name);
+  const bg = placeholderColorForTeam(name);
+  // No single quotes anywhere in this SVG — it gets assigned via a single-quoted JS
+  // string inside an onerror="" HTML attribute, so an unescaped ' would break it.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">` +
+    `<rect width="100" height="100" rx="16" fill="${bg}"/>` +
+    `<text x="50" y="54" text-anchor="middle" dominant-baseline="middle" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="#ffffff">${initials}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 function renderTeamProfile(data){
   const container = document.getElementById('teamProfileContainer');
   container.className = "";
@@ -3219,7 +3249,7 @@ function renderTeamProfile(data){
   const divShort = roddyEntry ? getDivisionShortLabel(roddyEntry.division) : "";
   const divLabel = divShort === "D1" ? "Eliza Cup" : divShort;
   const logoSrc = `logo/${teamLogoSlug(teamName)}.png`;
-  const logoOnError = `if(!this.dataset.fallback){this.dataset.fallback='1';this.src='logo/eliza-elephant.png';}else{this.style.display='none';}`;
+  const logoOnError = `if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${teamPlaceholderLogoDataUri(teamName)}';}`;
 
   // Overview
   const leagueVal = (divisionData && divisionData.standingsRow) ? `${ordinal(divisionData.standingsRow.pos)} · ${divLabel}` : "—";
@@ -3336,7 +3366,7 @@ function homeReigningChampionHtml(compName){
   const [season, winner] = comp.winners[0];
   const fg = comp.textColor || "#fff";
   const teamName = winner.replace(/\s*\([^)]*\)\s*$/, "").trim(); // strip trailing "(1st)" etc for the logo slug
-  const logoOnError = `if(!this.dataset.fallback){this.dataset.fallback='1';this.src='logo/eliza-elephant.png';}else{this.style.display='none';}`;
+  const logoOnError = `if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${teamPlaceholderLogoDataUri(teamName)}';}`;
   return `<div class="home-champ" style="background:${comp.color};color:${fg};">
     <img src="logo/${teamLogoSlug(teamName)}.png" alt="" class="home-champ-logo" onerror="${logoOnError}">
     <div class="home-champ-comp">${compName}</div>
