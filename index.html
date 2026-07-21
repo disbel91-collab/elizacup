@@ -206,6 +206,13 @@
   .team-profile-logo{
     width:150px;height:150px;object-fit:contain;border-radius:8px;flex-shrink:0;
   }
+
+  /* Large competition logo at the top of division / Roddy / FA Cup / ECL pages */
+  .comp-logo-hero{display:flex;justify-content:center;margin-bottom:20px;}
+  .comp-logo-hero img{width:110px;height:110px;object-fit:contain;}
+  @media (max-width:600px){
+    .comp-logo-hero img{width:84px;height:84px;}
+  }
   @media (max-width:600px){
     .team-profile-top{flex-direction:column;text-align:center;gap:14px;}
     .team-profile-logo{width:130px;height:130px;order:-1;}
@@ -480,6 +487,12 @@
   }
   .playoff-card{border-color:var(--pitch);border-width:2px;}
   .fixture-team .roddy-div-tag{vertical-align:middle;margin:0 2px;}
+  .fixture-card-wrap{display:flex;flex-direction:column;}
+  .playoff-seed-row{
+    font-family:'Barlow',sans-serif;font-size:11px;font-weight:600;color:#6b7c73;
+    text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px;text-align:center;
+  }
+  .playoff-seed-row span{color:#a8a296;font-weight:400;text-transform:none;margin:0 5px;}
 
   /* ---------- Head-to-head section ---------- */
   .h2h-card{
@@ -663,6 +676,10 @@
 </div>
 
 <main>
+  <div class="comp-logo-hero" id="compLogoHero" style="display:none;">
+    <img id="compLogoHeroImg" src="" alt="" onerror="this.style.display='none';">
+  </div>
+
   <section id="homeSection" style="display:none;">
     <div id="homeContainer"></div>
   </section>
@@ -883,6 +900,20 @@ function setStatus(msg, ok){
   document.getElementById('refreshBtn').addEventListener('click', load);
 }
 
+// Large hero logo shown at the top of division / Roddy / FA Cup / ECL pages.
+// Division 2A/2B share one "Division 2" logo, 3A/3B share one "Division 3" logo.
+function compLogoPathFor(division){
+  if(division.type === "division"){
+    if(division.id === "d1") return "logo/division-1-logo.png";
+    if(division.id === "d2a" || division.id === "d2b") return "logo/division-2-logo.png";
+    if(division.id === "d3a" || division.id === "d3b") return "logo/division-3-logo.png";
+  }
+  if(division.type === "roddy") return "logo/roddy-logo.png";
+  if(division.type === "facup") return "logo/fa-cup-logo.png";
+  if(division.type === "ecl") return "logo/ecl-logo.png";
+  return null;
+}
+
 function togglePageSections(){
   const type = currentDivision.type;
   const isDivision = type === "division";
@@ -906,6 +937,17 @@ function togglePageSections(){
   document.getElementById('teamsSection').style.display = isTeams ? "" : "none";
   document.getElementById('teamProfileSection').style.display = isTeamProfile ? "" : "none";
   document.querySelector('.ticker-wrap').style.display = isDivision ? "" : "none";
+
+  const heroLogoPath = compLogoPathFor(currentDivision);
+  const heroEl = document.getElementById('compLogoHero');
+  const heroImg = document.getElementById('compLogoHeroImg');
+  if(heroLogoPath){
+    heroImg.style.display = "";
+    heroImg.src = heroLogoPath;
+    heroEl.style.display = "";
+  }else{
+    heroEl.style.display = "none";
+  }
 }
 
 async function load(){
@@ -1405,10 +1447,13 @@ const FIXTURE_COL_END = 43;
 // (2A v 2B, or 3A v 3B) — QF, SF, and Final respectively. They live in this same sheet
 // now, in the same fixture-row format as regular rounds, but the opponent comes from
 // the SIBLING conference, so it's never in this division's own knownTeams roster.
+// Columns AF/AS (flanking the regular fixture window on either side) hold each side's
+// seeding, e.g. "2ND 2A" — how that team qualified for the playoff.
 const PLAYOFF_ROUNDS = new Set(["24","25","26"]);
 const PLAYOFF_ROUND_NAME = { "24": "QF", "25": "SF", "26": "F" };
 const PLAYOFF_OWN_CONF = { d2a: "2A", d2b: "2B", d3a: "3A", d3b: "3B" };
 const PLAYOFF_SIBLING_CONF = { d2a: "2B", d2b: "2A", d3a: "3B", d3b: "3A" };
+const PLAYOFF_SEED_COL = { home: 31, away: 44 }; // AF, AS (0-indexed)
 
 let fixturesDebug = { playoffRowsSeen: [] };
 
@@ -1435,7 +1480,7 @@ function parseFixtures(rows){
     if(nonEmpty.some(c => ROLE_TOKENS.has(c.toUpperCase()))) continue;
 
     const isPlayoffRound = PLAYOFF_ROUNDS.has(currentRound);
-    if(isPlayoffRound) fixturesDebug.playoffRowsSeen.push({ row: r, round: currentRound, nonEmpty });
+    if(isPlayoffRound) fixturesDebug.playoffRowsSeen.push({ row: r, round: currentRound, nonEmpty, homeSeedCol31: cell(row,31), awaySeedCol44: cell(row,44) });
 
     // Find team names present, in left-to-right order, ignoring blanks. For playoff
     // rounds, also accept any plausible team-name-shaped text (not just this
@@ -1466,6 +1511,8 @@ function parseFixtures(rows){
       const sibConf = PLAYOFF_SIBLING_CONF[currentDivision.id];
       fixture.homeConf = homeHit.known ? ownConf : sibConf;
       fixture.awayConf = awayHit.known ? ownConf : sibConf;
+      fixture.homeSeed = cell(row, PLAYOFF_SEED_COL.home);
+      fixture.awaySeed = cell(row, PLAYOFF_SEED_COL.away);
     }
 
     fixturesByRound[currentRound].push(fixture);
@@ -1568,8 +1615,17 @@ function renderRoundTabs(){
       renderFixtures(btn.dataset.round);
     });
   });
-  tabsEl.firstChild.classList.add('active');
-  renderFixtures(rounds[0]);
+  // Default to the most recent round with any played result, rather than always
+  // Round 1 — falls back to the first round if the season hasn't started yet.
+  let defaultIdx = 0;
+  rounds.forEach((r,i)=>{
+    const hasPlayed = (fixturesByRound[r]||[]).some(f => f.homeScore !== null && f.awayScore !== null);
+    if(hasPlayed) defaultIdx = i;
+  });
+  const tabButtons = tabsEl.querySelectorAll('.round-tab');
+  tabButtons[defaultIdx].classList.add('active');
+  try{ tabButtons[defaultIdx].scrollIntoView({inline:'center', block:'nearest'}); }catch(e){}
+  renderFixtures(rounds[defaultIdx]);
 }
 
 function renderFixtures(round){
@@ -1595,11 +1651,20 @@ function renderFixtures(round){
       ? `<span class="${resultClass(homeWin)}">${f.homeScore}</span> – <span class="${resultClass(awayWin)}">${f.awayScore}</span>`
       : `<span class="upcoming">vs</span>`;
     const confPill = (conf) => conf ? `<span class="roddy-div-tag" style="background:${getDivisionColorByLabel(conf)};">${conf}</span>` : "";
-    return `<div class="fixture-card${f.isPlayoff ? " playoff-card" : ""}">
+    const card = `<div class="fixture-card${f.isPlayoff ? " playoff-card" : ""}">
       <div class="fixture-team ${resultClass(homeWin)}">${f.isPlayoff ? confPill(f.homeConf) + " " : ""}${teamLink(f.home)}</div>
       <div class="fixture-score">${scoreHtml}</div>
       <div class="fixture-team right ${resultClass(awayWin)}">${teamLink(f.away)}${f.isPlayoff ? " " + confPill(f.awayConf) : ""}</div>
     </div>`;
+    // Seed row shows how each side qualified for the playoff, e.g. "2ND 2A v 3RD 2B" —
+    // straight from the sheet's own seed-label columns, sitting above that fixture.
+    if(f.isPlayoff && (f.homeSeed || f.awaySeed)){
+      return `<div class="fixture-card-wrap">
+        <div class="playoff-seed-row">${f.homeSeed || "—"}<span>v</span>${f.awaySeed || "—"}</div>
+        ${card}
+      </div>`;
+    }
+    return card;
   }).join("");
   el.innerHTML = banner + `<div class="fixture-grid">${cardsHtml}</div>`;
 }
