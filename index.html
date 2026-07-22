@@ -1257,7 +1257,8 @@ async function load(){
       document.getElementById('debugOut').textContent =
         "Historical debug: " + JSON.stringify(historicalDebug, null, 2) + "\n\n" +
         "H2H record debug: " + JSON.stringify(h2hRecordsDebug, null, 2) + "\n\n" +
-        "Team vs Team debug: " + JSON.stringify(teamVsTeamDebug, null, 2);
+        "Team vs Team debug: " + JSON.stringify(teamVsTeamDebug, null, 2) + "\n\n" +
+        "Club info debug: " + JSON.stringify(clubInfoDebug, null, 2);
       setStatus("Live — updated " + new Date().toLocaleString());
     }catch(err){
       console.error(err);
@@ -2980,6 +2981,72 @@ function renderTeamsBrowse(){
 // Roddy gives the division tag; the division sheet gives the full season fixture list
 // (already pulled whole for the Fixtures tab, just filtered here); FA Cup and ECL are
 // scanned for any involvement. All three run in parallel once the division is known.
+// ---------- Club Info (separate "Eliza Admin" spreadsheet) ----------
+// Manager, year entered, and previous names — matched by header text rather than
+// fixed column letters, since this sheet has a blank spacer column that shifts things.
+const CLUB_INFO_SHEET_ID = "1xe4SAPxoNfy3TtucWt-g7BYhRh98Da1cdRgyt6L7xSI";
+const CLUB_INFO_GID = "189863736";
+
+function clubInfoCsvUrlFor(){
+  return `https://docs.google.com/spreadsheets/d/${CLUB_INFO_SHEET_ID}/gviz/tq?tqx=out:csv&gid=${CLUB_INFO_GID}&cachebust=` + Date.now();
+}
+
+let clubInfoDebug = {};
+
+function findClubInfo(rows, teamName){
+  let headerRow = -1;
+  const cols = {};
+  for(let r=0; r<Math.min(rows.length, 15); r++){
+    const row = rows[r]||[];
+    let found = 0;
+    row.forEach((c,ci)=>{
+      const v = (c||"").toString().trim().toUpperCase();
+      if(v === "CURRENT NAME"){ cols.name = ci; found++; }
+      if(v === "PLAYER NAME"){ cols.manager = ci; found++; }
+      if(v === "YEAR ENTERED"){ cols.yearEntered = ci; found++; }
+      if(v === "PREVIOUS NAMES"){ cols.previousNames = ci; found++; }
+    });
+    if(found >= 3){ headerRow = r; break; }
+  }
+  clubInfoDebug = { headerRow, cols };
+  if(headerRow === -1 || cols.name === undefined) return null;
+
+  for(let r=headerRow+1; r<rows.length; r++){
+    const row = rows[r]||[];
+    const name = cell(row, cols.name);
+    if(!name) continue;
+    if(name.toUpperCase() === teamName.toUpperCase()){
+      return {
+        manager: cols.manager!==undefined ? cell(row, cols.manager) : "",
+        yearEntered: cols.yearEntered!==undefined ? cell(row, cols.yearEntered) : "",
+        previousNames: cols.previousNames!==undefined ? cell(row, cols.previousNames) : ""
+      };
+    }
+  }
+  return null;
+}
+
+// ---------- Team trophies — reuses the Hall of Fame's own HONOUR_ROLL data rather
+// than parsing yet another sheet region, so it always matches what the Hall of Fame
+// page shows. parseHonourEntries already handles both single-winner seasons and the
+// split "Team (2A - 1st), Team (2B - 1st)" format used by Division 2/3.
+function findTeamTrophies(teamName){
+  const trophies = [];
+  const upperTeam = teamName.toUpperCase();
+  Object.keys(HONOUR_ROLL).forEach(compName=>{
+    const comp = HONOUR_ROLL[compName];
+    (comp.winners||[]).forEach(([season, winnerRaw])=>{
+      parseHonourEntries(winnerRaw).forEach(e=>{
+        if(e.team.toUpperCase() === upperTeam){
+          trophies.push({ competition: compName, season, color: comp.color });
+        }
+      });
+    });
+  });
+  trophies.sort((a,b)=> b.season.localeCompare(a.season));
+  return trophies;
+}
+
 async function loadTeamProfile(teamName){
   const roddyDiv = DIVISIONS.find(d => d.id === "roddy");
   const roddyRes = await fetch(csvUrlFor(roddyDiv));
@@ -3114,8 +3181,18 @@ async function loadTeamProfile(teamName){
     })
   );
 
+  let clubInfo = null;
+  fetches.push(
+    fetch(clubInfoCsvUrlFor()).then(r => r.text()).then(text => {
+      const rows = Papa.parse(text, {skipEmptyLines:false}).data;
+      clubInfo = findClubInfo(rows, teamName);
+    }).catch(err => console.error("Club info fetch failed", err))
+  );
+
+  const trophies = findTeamTrophies(teamName); // static HONOUR_ROLL data — no fetch needed
+
   await Promise.all(fetches);
-  renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords, teamVsTeamOpponents });
+  renderTeamProfile({ teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords, teamVsTeamOpponents, clubInfo, trophies });
 }
 
 // ---------- Historical Record (dedicated tab, gid 1444343417) ----------
@@ -3665,6 +3742,23 @@ function overviewCardHtml(label, value, color){
   </div>`;
 }
 
+function teamTrophiesHtml(trophies){
+  if(!trophies || !trophies.length){
+    return `<div class="section-head" style="margin-top:28px;"><h2 style="font-size:18px;">Trophies</h2></div>
+      <p style="font-family:'Barlow',sans-serif;font-size:13px;color:#6b7c73;">No trophies yet.</p>`;
+  }
+  return `<div class="section-head" style="margin-top:28px;"><h2 style="font-size:18px;">Trophies (${trophies.length})</h2></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;max-width:640px;">
+      ${trophies.map(t => `<div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line-light);border-left:4px solid ${t.color};border-radius:5px;padding:8px 12px;">
+        <span style="font-size:16px;">🏆</span>
+        <div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;">${t.competition}</div>
+          <div style="font-family:'Barlow',sans-serif;font-size:11px;color:#6b7c73;">${t.season}</div>
+        </div>
+      </div>`).join("")}
+    </div>`;
+}
+
 // Converts a team name into the matching logo filename convention:
 // lowercase, apostrophes/periods stripped, everything else -> hyphens.
 function teamLogoSlug(name){
@@ -3708,7 +3802,7 @@ function teamPlaceholderLogoDataUri(name){
 function renderTeamProfile(data){
   const container = document.getElementById('teamProfileContainer');
   container.className = "";
-  const { teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords, teamVsTeamOpponents } = data;
+  const { teamName, roddyEntry, divisionData, facupSummary, eclSummary, eclMatches, historicalRecords, h2hRecords, teamVsTeamOpponents, clubInfo, trophies } = data;
 
   if(!roddyEntry && !divisionData){
     container.innerHTML = `<div class="state-msg error">Couldn't find "${teamName}" anywhere in the league. Check the Debug panel below.</div>`;
@@ -3730,6 +3824,10 @@ function renderTeamProfile(data){
       <div class="team-profile-heading">
         <h2 class="team-profile-name">${teamName}</h2>
         ${divLabel ? `<span class="sub" style="background:${divColor};color:#fff;padding:3px 9px;border-radius:10px;text-transform:none;">${divShort === "D1" ? divLabel : "Division " + divLabel}</span>` : ""}
+        ${clubInfo && (clubInfo.manager || clubInfo.yearEntered) ? `<div style="font-family:'Barlow',sans-serif;font-size:13px;color:#6b7c73;">
+            ${clubInfo.manager ? `Manager: <b style="color:var(--ink);">${clubInfo.manager}</b>` : ""}${clubInfo.manager && clubInfo.yearEntered ? " · " : ""}${clubInfo.yearEntered ? `Est. ${clubInfo.yearEntered}` : ""}
+          </div>` : ""}
+        ${clubInfo && clubInfo.previousNames ? `<div style="font-family:'Barlow',sans-serif;font-size:12px;color:#a8a296;">Previously: ${clubInfo.previousNames}</div>` : ""}
       </div>
       <div class="team-profile-cards">
         ${overviewCardHtml("League Position", leagueVal, divColor)}
@@ -3740,6 +3838,8 @@ function renderTeamProfile(data){
     </div>
     <img src="${logoSrc}" alt="" class="team-profile-logo" onerror="${logoOnError}">
   </div>`;
+
+  html += teamTrophiesHtml(trophies);
 
   // Season fixtures
   if(divisionData){
