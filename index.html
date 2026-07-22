@@ -4023,54 +4023,68 @@ function parseHistoricalSeason(rows){
     }
   }
 
-  // ---- ECL (W:AF) — group titles can arrive as "ECL  GROUP A" (the section title
-  // merged in) rather than plain "GROUP A", so match by endsWith and normalize the
-  // display name. Groups: title row, header row, then data (r+2). Knockout: title row,
-  // fixtures immediately after (r+1), no header row. ----
+  // ---- ECL groups (W:AF) — group titles can arrive as "ECL  GROUP A" (the section
+  // title merged in) rather than plain "GROUP A", so match by endsWith and normalize
+  // the display name. Title row, header row, then data (r+2). ----
   const GROUP_LABELS = ["GROUP A","GROUP B","GROUP C"];
-  const KO_LABELS = ["QUARTER FINALS","SEMI FINALS","FINAL"];
   const eclGroups = [];
-  const eclKnockout = [];
-  const eclKnockoutRawDump = [];
   for(let r=0; r<rows.length; r++){
     const w = cell(rows[r]||[],22).toUpperCase();
     const groupLabel = GROUP_LABELS.find(g => w === g || w.endsWith(g));
-    if(groupLabel){
-      const teams = [];
-      for(let dr=r+2; dr<rows.length; dr++){
-        const pos = cell(rows[dr]||[],22);
-        if(!pos) break;
-        teams.push({
-          pos, team: cell(rows[dr]||[],23), pts: cell(rows[dr]||[],24),
-          w: cell(rows[dr]||[],25), d: cell(rows[dr]||[],26), l: cell(rows[dr]||[],27),
-          for: cell(rows[dr]||[],28), aga: cell(rows[dr]||[],29), diff: cell(rows[dr]||[],30),
-          status: cell(rows[dr]||[],31)
-        });
-      }
-      eclGroups.push({ name: groupLabel, teams });
-      continue;
+    if(!groupLabel) continue;
+    const teams = [];
+    for(let dr=r+2; dr<rows.length; dr++){
+      const pos = cell(rows[dr]||[],22);
+      if(!pos) break;
+      teams.push({
+        pos, team: cell(rows[dr]||[],23), pts: cell(rows[dr]||[],24),
+        w: cell(rows[dr]||[],25), d: cell(rows[dr]||[],26), l: cell(rows[dr]||[],27),
+        for: cell(rows[dr]||[],28), aga: cell(rows[dr]||[],29), diff: cell(rows[dr]||[],30),
+        status: cell(rows[dr]||[],31)
+      });
     }
-    const koLabel = KO_LABELS.find(k => w === k || w.endsWith(k));
+    eclGroups.push({ name: groupLabel, teams });
+  }
+
+  // ---- ECL knockout (AH:AK) — moved to its own isolated columns, clear of everything
+  // else: AH=Team 1, AI=Team 1 score, AJ=Team 2 score, AK=Team 2. Round-label rows
+  // ("QUARTER FINALS" etc, if present) sit in AH same as before; fixtures follow
+  // immediately after (r+1), no header row. ----
+  const KO_LABELS = ["QUARTER FINALS","SEMI FINALS","FINAL"];
+  const eclKnockout = [];
+  const eclKnockoutRawDump = [];
+  for(let r=0; r<rows.length; r++){
+    const ah = cell(rows[r]||[],33).toUpperCase();
+    const koLabel = KO_LABELS.find(k => ah === k || ah.endsWith(k));
     if(koLabel){
       const fixtures = [];
       for(let dr=r+1; dr<rows.length; dr++){
-        const home = cell(rows[dr]||[],22);
+        const home = cell(rows[dr]||[],33);
         if(!home) break;
         const homeUpper = home.toUpperCase();
-        if(GROUP_LABELS.some(g=>homeUpper.endsWith(g)) || KO_LABELS.some(k=>homeUpper.endsWith(k))) break;
+        if(KO_LABELS.some(k=>homeUpper.endsWith(k))) break;
         eclKnockoutRawDump.push({
           row: dr+1,
-          thisRow: (rows[dr]||[]).map((c,ci)=> c ? `[${ci}]="${c.toString().trim()}"` : "").filter(Boolean).join(" "),
-          rowAbove: (rows[dr-1]||[]).map((c,ci)=> c ? `[${ci}]="${c.toString().trim()}"` : "").filter(Boolean).join(" "),
-          rowBelow: (rows[dr+1]||[]).map((c,ci)=> c ? `[${ci}]="${c.toString().trim()}"` : "").filter(Boolean).join(" ")
+          thisRow: (rows[dr]||[]).map((c,ci)=> c ? `[${ci}]="${c.toString().trim()}"` : "").filter(Boolean).join(" ")
         });
         fixtures.push({
-          home, homeScore: cell(rows[dr]||[],23), awayScore: cell(rows[dr]||[],24),
-          away: cell(rows[dr]||[], 25) // confirmed: exact column, not merged
+          home, homeScore: cell(rows[dr]||[],34), awayScore: cell(rows[dr]||[],35),
+          away: cell(rows[dr]||[],36)
         });
       }
       eclKnockout.push({ name: koLabel, fixtures });
     }
+  }
+  if(eclKnockout.length === 0){
+    // Fallback: no round-label rows found in column AH — read AH4:AK14 as one flat
+    // list of fixtures instead of grouped rounds.
+    const fixtures = [];
+    for(let r=3; r<=13 && r<rows.length; r++){
+      const home = cell(rows[r]||[],33);
+      if(!home || KO_LABELS.some(k=>home.toUpperCase().endsWith(k))) continue;
+      fixtures.push({ home, homeScore: cell(rows[r]||[],34), awayScore: cell(rows[r]||[],35), away: cell(rows[r]||[],36) });
+    }
+    if(fixtures.length) eclKnockout.push({ name: "Knockout", fixtures });
   }
 
   historyDebug = {
