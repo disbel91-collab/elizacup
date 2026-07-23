@@ -3945,121 +3945,126 @@ function historyCsvUrlFor(gid){
 }
 
 const HIST_DIVISION_LABELS = [
-  { label: "ELIZA CUP", key: "d1", name: "Eliza Cup" },
-  { label: "DIVISION 2A", key: "d2a", name: "Division 2A" },
-  { label: "DIVISION 2B", key: "d2b", name: "Division 2B" },
-  { label: "DIVISION 3A", key: "d3a", name: "Division 3A" },
-  { label: "DIVISION 3B", key: "d3b", name: "Division 3B" }
+  { label: "ELIZA CUP", key: "d1", name: "Eliza Cup", base: 0 },   // A:J
+  { label: "DIVISION 2A", key: "d2a", name: "Division 2A", base: 11 }, // L:U
+  { label: "DIVISION 2B", key: "d2b", name: "Division 2B", base: 22 }, // W:AF
+  { label: "DIVISION 3A", key: "d3a", name: "Division 3A", base: 33 }, // AH:AQ
+  { label: "DIVISION 3B", key: "d3b", name: "Division 3B", base: 44 }  // AS:BB
 ];
 const HIST_DIV_COLORS = { D1:"#28427c", "2A":"#bc3532", "2B":"#990000", "3A":"#6aa84f", "3B":"#274e13" };
 
 let historyDebug = {};
 
 function parseHistoricalSeason(rows){
-  // ---- Divisions (A:J) — Eliza Cup's title+header text is concatenated into a single
-  // cell ("ELIZA CUP POS" in column A), but the other divisions apparently put the
-  // title on its own row directly above a plain "POS ..." header row instead. Handle
-  // both: find the header row by its TEAM/PTS/STATUS combo, then read the division
-  // name from column A on that row, falling back to the row above if column A there
-  // is blank (i.e. just "POS", title given nowhere on the header row itself). ----
+  // ---- Divisions — each now its own isolated block of columns (A:J, L:U, W:AF,
+  // AH:AQ, AS:BB), same idea as the ECL groups: just find that block's own
+  // POS/TEAM/PTS/STATUS header row directly, data starts the next row. ----
   const divisions = {};
-  for(let r=0; r<rows.length; r++){
-    const c1 = cell(rows[r]||[],1).toUpperCase();
-    const c2 = cell(rows[r]||[],2).toUpperCase();
-    const c9 = cell(rows[r]||[],9).toUpperCase();
-    if(c1 !== "TEAM" || c2 !== "PTS" || c9 !== "STATUS") continue;
-
-    let rawLabel = cell(rows[r]||[],0).toUpperCase().replace(/\s*POS\s*$/,"").trim();
-    if(!rawLabel && r>0) rawLabel = cell(rows[r-1]||[],0).toUpperCase().trim();
-    if(!rawLabel) continue;
-
-    const match = HIST_DIVISION_LABELS.find(d => rawLabel === d.label || rawLabel.endsWith(d.label));
-    if(!match) continue;
-
-    const teams = [];
-    for(let dr=r+1; dr<rows.length; dr++){
-      const pos = cell(rows[dr]||[], 0);
-      if(!pos) break;
-      teams.push({
-        pos, team: cell(rows[dr]||[],1), pts: cell(rows[dr]||[],2),
-        w: cell(rows[dr]||[],3), d: cell(rows[dr]||[],4), l: cell(rows[dr]||[],5),
-        for: cell(rows[dr]||[],6), aga: cell(rows[dr]||[],7), dif: cell(rows[dr]||[],8),
-        status: cell(rows[dr]||[],9)
-      });
+  HIST_DIVISION_LABELS.forEach(db=>{
+    let headerRow = -1;
+    for(let r=0; r<rows.length; r++){
+      const c1 = cell(rows[r]||[],db.base+1).toUpperCase();
+      const c2 = cell(rows[r]||[],db.base+2).toUpperCase();
+      const c9 = cell(rows[r]||[],db.base+9).toUpperCase();
+      if(c1 === "TEAM" && c2 === "PTS" && c9 === "STATUS"){ headerRow = r; break; }
     }
-    divisions[match.key] = { name: match.name, teams };
-  }
+    const teams = [];
+    if(headerRow !== -1){
+      for(let dr=headerRow+1; dr<rows.length; dr++){
+        const pos = cell(rows[dr]||[],db.base);
+        if(!pos) break;
+        teams.push({
+          pos, team: cell(rows[dr]||[],db.base+1), pts: cell(rows[dr]||[],db.base+2),
+          w: cell(rows[dr]||[],db.base+3), d: cell(rows[dr]||[],db.base+4), l: cell(rows[dr]||[],db.base+5),
+          for: cell(rows[dr]||[],db.base+6), aga: cell(rows[dr]||[],db.base+7), dif: cell(rows[dr]||[],db.base+8),
+          status: cell(rows[dr]||[],db.base+9)
+        });
+      }
+    }
+    divisions[db.key] = { name: db.name, teams };
+  });
 
-  // ---- Roddy (L:O) — same concatenation issue ("RODDY POS" in column L), so find the
-  // header row via the TEAM/DIV/TOTAL combo in M:O instead of trusting column L's text.
+  // ---- Roddy (BD:BG) — now its own isolated block. Header row found via the
+  // TEAM/DIV/TOTAL combo (robust to whatever ends up in the Pos column's own text). ----
+  const RODDY_BASE = 55; // BD
   let roddyHeaderRow = -1;
   for(let r=0; r<rows.length; r++){
-    const m = cell(rows[r]||[],12).toUpperCase();
-    const n = cell(rows[r]||[],13).toUpperCase();
-    const o = cell(rows[r]||[],14).toUpperCase();
+    const m = cell(rows[r]||[],RODDY_BASE+1).toUpperCase();
+    const n = cell(rows[r]||[],RODDY_BASE+2).toUpperCase();
+    const o = cell(rows[r]||[],RODDY_BASE+3).toUpperCase();
     if(m === "TEAM" && n === "DIV" && o === "TOTAL"){ roddyHeaderRow = r; break; }
   }
   const roddy = [];
   if(roddyHeaderRow !== -1){
     for(let r=roddyHeaderRow+1; r<rows.length; r++){
-      const pos = cell(rows[r]||[],11);
+      const pos = cell(rows[r]||[],RODDY_BASE);
       if(!pos) break;
-      roddy.push({ pos, team: cell(rows[r]||[],12), division: cell(rows[r]||[],13), total: cell(rows[r]||[],14) });
+      roddy.push({ pos, team: cell(rows[r]||[],RODDY_BASE+1), division: cell(rows[r]||[],RODDY_BASE+2), total: cell(rows[r]||[],RODDY_BASE+3) });
     }
   }
 
-  // ---- FA Cup (Q:U) — a row with only Q filled is a round label; a row with Q AND T
-  // filled is a fixture; U holds "REPLAY" when the first match was tied. Team names
-  // read via mergedCell in case a long name spans into the next column. ----
+  // ---- FA Cup (BI:BM) — a row with only the first column filled is a round label; a
+  // row with team1 AND team2 filled is a fixture; the 5th column holds "REPLAY". ----
+  const FACUP_BASE = 60; // BI
   const facup = [];
   {
     let current = null;
     for(let r=0; r<rows.length; r++){
-      const rc = cell(rows[r]||[],17), s = cell(rows[r]||[],18), u = cell(rows[r]||[],20);
-      const qOnly = cell(rows[r]||[],16), tOnly = cell(rows[r]||[],19);
+      const rc = cell(rows[r]||[],FACUP_BASE+1), s = cell(rows[r]||[],FACUP_BASE+2), u = cell(rows[r]||[],FACUP_BASE+4);
+      const qOnly = cell(rows[r]||[],FACUP_BASE), tOnly = cell(rows[r]||[],FACUP_BASE+3);
       if(!qOnly && !rc && !s && !tOnly) continue;
       if(qOnly && !rc && !s && !tOnly){ current = { name: qOnly, fixtures: [] }; facup.push(current); continue; }
       if(current && qOnly && tOnly){ current.fixtures.push({ home:qOnly, homeScore:rc, awayScore:s, away:tOnly, replay:/REPLAY/i.test(u) }); }
     }
   }
 
-  // ---- ECL groups (W:AF) — group titles can arrive as "ECL  GROUP A" (the section
-  // title merged in) rather than plain "GROUP A", so match by endsWith and normalize
-  // the display name. Title row, header row, then data (r+2). ----
-  const GROUP_LABELS = ["GROUP A","GROUP B","GROUP C"];
+  // ---- ECL groups (BO:BX, BZ:CI, CK:CT) — each is now its own isolated block, so no
+  // more "GROUP A" text label needed: just find that block's own POS/TEAM/PTS/STATUS
+  // header row directly, data starts the next row. ----
+  const ECL_GROUP_BLOCKS = [
+    { name: "GROUP A", base: 66 }, // BO
+    { name: "GROUP B", base: 77 }, // BZ
+    { name: "GROUP C", base: 88 }  // CK
+  ];
   const eclGroups = [];
-  for(let r=0; r<rows.length; r++){
-    const w = cell(rows[r]||[],22).toUpperCase();
-    const groupLabel = GROUP_LABELS.find(g => w === g || w.endsWith(g));
-    if(!groupLabel) continue;
-    const teams = [];
-    for(let dr=r+2; dr<rows.length; dr++){
-      const pos = cell(rows[dr]||[],22);
-      if(!pos) break;
-      teams.push({
-        pos, team: cell(rows[dr]||[],23), pts: cell(rows[dr]||[],24),
-        w: cell(rows[dr]||[],25), d: cell(rows[dr]||[],26), l: cell(rows[dr]||[],27),
-        for: cell(rows[dr]||[],28), aga: cell(rows[dr]||[],29), diff: cell(rows[dr]||[],30),
-        status: cell(rows[dr]||[],31)
-      });
+  ECL_GROUP_BLOCKS.forEach(gb=>{
+    let headerRow = -1;
+    for(let r=0; r<rows.length; r++){
+      const c1 = cell(rows[r]||[],gb.base+1).toUpperCase();
+      const c2 = cell(rows[r]||[],gb.base+2).toUpperCase();
+      const c9 = cell(rows[r]||[],gb.base+9).toUpperCase();
+      if(c1 === "TEAM" && c2 === "PTS" && c9 === "STATUS"){ headerRow = r; break; }
     }
-    eclGroups.push({ name: groupLabel, teams });
-  }
+    const teams = [];
+    if(headerRow !== -1){
+      for(let dr=headerRow+1; dr<rows.length; dr++){
+        const pos = cell(rows[dr]||[],gb.base);
+        if(!pos) break;
+        teams.push({
+          pos, team: cell(rows[dr]||[],gb.base+1), pts: cell(rows[dr]||[],gb.base+2),
+          w: cell(rows[dr]||[],gb.base+3), d: cell(rows[dr]||[],gb.base+4), l: cell(rows[dr]||[],gb.base+5),
+          for: cell(rows[dr]||[],gb.base+6), aga: cell(rows[dr]||[],gb.base+7), diff: cell(rows[dr]||[],gb.base+8),
+          status: cell(rows[dr]||[],gb.base+9)
+        });
+      }
+    }
+    eclGroups.push({ name: gb.name, teams });
+  });
 
-  // ---- ECL knockout (AH:AK) — moved to its own isolated columns, clear of everything
-  // else: AH=Team 1, AI=Team 1 score, AJ=Team 2 score, AK=Team 2. Round-label rows
-  // ("QUARTER FINALS" etc, if present) sit in AH same as before; fixtures follow
+  // ---- ECL knockout (CV:CY) — CV=Team 1, CW=Team 1 score, CX=Team 2 score, CY=Team 2.
+  // Round-label rows ("QUARTER FINALS" etc, if present) sit in CV; fixtures follow
   // immediately after (r+1), no header row. ----
+  const KO_BASE = 99; // CV
   const KO_LABELS = ["QUARTER FINALS","SEMI FINALS","FINAL"];
   const eclKnockout = [];
   const eclKnockoutRawDump = [];
   for(let r=0; r<rows.length; r++){
-    const ah = cell(rows[r]||[],33).toUpperCase();
-    const koLabel = KO_LABELS.find(k => ah === k || ah.endsWith(k));
+    const label = cell(rows[r]||[],KO_BASE).toUpperCase();
+    const koLabel = KO_LABELS.find(k => label === k || label.endsWith(k));
     if(koLabel){
       const fixtures = [];
       for(let dr=r+1; dr<rows.length; dr++){
-        const home = cell(rows[dr]||[],33);
+        const home = cell(rows[dr]||[],KO_BASE);
         if(!home) break;
         const homeUpper = home.toUpperCase();
         if(KO_LABELS.some(k=>homeUpper.endsWith(k))) break;
@@ -4068,21 +4073,21 @@ function parseHistoricalSeason(rows){
           thisRow: (rows[dr]||[]).map((c,ci)=> c ? `[${ci}]="${c.toString().trim()}"` : "").filter(Boolean).join(" ")
         });
         fixtures.push({
-          home, homeScore: cell(rows[dr]||[],34), awayScore: cell(rows[dr]||[],35),
-          away: cell(rows[dr]||[],36)
+          home, homeScore: cell(rows[dr]||[],KO_BASE+1), awayScore: cell(rows[dr]||[],KO_BASE+2),
+          away: cell(rows[dr]||[],KO_BASE+3)
         });
       }
       eclKnockout.push({ name: koLabel, fixtures });
     }
   }
   if(eclKnockout.length === 0){
-    // Fallback: no round-label rows found in column AH — read AH4:AK14 as one flat
-    // list of fixtures instead of grouped rounds.
+    // Fallback: no round-label rows found — read CV4:CY14 as one flat list of
+    // fixtures instead of grouped rounds.
     const fixtures = [];
     for(let r=3; r<=13 && r<rows.length; r++){
-      const home = cell(rows[r]||[],33);
+      const home = cell(rows[r]||[],KO_BASE);
       if(!home || KO_LABELS.some(k=>home.toUpperCase().endsWith(k))) continue;
-      fixtures.push({ home, homeScore: cell(rows[r]||[],34), awayScore: cell(rows[r]||[],35), away: cell(rows[r]||[],36) });
+      fixtures.push({ home, homeScore: cell(rows[r]||[],KO_BASE+1), awayScore: cell(rows[r]||[],KO_BASE+2), away: cell(rows[r]||[],KO_BASE+3) });
     }
     if(fixtures.length) eclKnockout.push({ name: "Knockout", fixtures });
   }
@@ -4095,7 +4100,7 @@ function parseHistoricalSeason(rows){
     eclGroupsFound: eclGroups.map(g=>({name:g.name, teams:g.teams.length})),
     eclKnockoutFound: eclKnockout.map(k=>({name:k.name, fixtures:k.fixtures.length})),
     eclKnockoutRawDump,
-    rawRowDump: rows.slice(0, 6).map((row,i) => "row" + (i+1) + ": " + (row||[]).map((c,ci)=> c ? `[${ci}]="${c.toString().trim()}"` : "").filter(Boolean).join(" "))
+    rawRowDump: rows.slice(0, 35).map((row,i) => "row" + (i+1) + ": " + (row||[]).map((c,ci)=> c ? `[${ci}]="${c.toString().trim()}"` : "").filter(Boolean).join(" ")).filter(line => !line.endsWith(":"))
   };
 
   return { divisions, roddy, facup, eclGroups, eclKnockout };
