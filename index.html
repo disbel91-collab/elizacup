@@ -184,7 +184,7 @@
   .home-champ-season{font-family:'Barlow',sans-serif;font-size:11.5px;opacity:0.75;margin-top:5px;}
 
   /* Split competitions (Division 2 -> 2A/2B, Division 3 -> 3A/3B): two half-size cards
-     side by side, occupying a single slot in the champions grid. */
+     side by side, occupying a single slot in the champions grid on mobile/tablet. */
   .home-champ-split{display:flex;gap:8px;}
   .home-champ-half{padding:14px 8px 12px;min-width:0;}
   .home-champ-half .home-champ-logo{width:40px;height:40px;margin-bottom:8px;}
@@ -193,6 +193,18 @@
   .home-champ-half .home-champ-season{font-size:10px;margin-top:3px;}
   @media (max-width:420px){
     .home-champ-split{flex-direction:column;}
+  }
+  /* Desktop: force Eliza Cup/Roddy/FA Cup/ECL onto one row of 4, then un-wrap each
+     split pair (display:contents drops the wrapper from layout) so 2A/2B/3A/3B sit as
+     four individual full-size cards on their own row underneath, matching the others. */
+  @media (min-width:900px){
+    .home-champ-grid{grid-template-columns:repeat(4,1fr);}
+    .home-champ-split{display:contents;}
+    .home-champ-half{padding:22px 16px 18px;}
+    .home-champ-half .home-champ-logo{width:64px;height:64px;margin-bottom:12px;}
+    .home-champ-half .home-champ-comp{font-size:10.5px;}
+    .home-champ-half .home-champ-team{font-size:21px;margin-top:5px;}
+    .home-champ-half .home-champ-season{font-size:11.5px;margin-top:5px;}
   }
 
   /* ---------- Team profile header ---------- */
@@ -4348,6 +4360,8 @@ function homeDivisionsCardHtml(){
 const HOME_ICON_CALENDAR = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><circle cx="8" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="8" cy="17" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none"/></svg>`;
 const HOME_ICON_TROPHY = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 5H4a3 3 0 0 0 3 4"/><path d="M16 5h4a3 3 0 0 1-3 4"/><line x1="12" y1="13" x2="12" y2="17"/><path d="M8 21h8"/><path d="M9 17h6l1 4H8l1-4z"/></svg>`;
 const HOME_ICON_TEAMS = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="8.5" r="2.4"/><path d="M15.5 14.7c2.5.3 4.5 2.2 4.5 5.3"/></svg>`;
+const HOME_ICON_STATS = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><rect x="5" y="13" width="4" height="8" rx="0.5" fill="currentColor" stroke="none"/><rect x="10" y="8" width="4" height="13" rx="0.5" fill="currentColor" stroke="none"/><rect x="15" y="4" width="4" height="17" rx="0.5" fill="currentColor" stroke="none"/></svg>`;
+const HOME_ICON_HISTORY = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 3 3 8 8 8"/><polyline points="12 8 12 12 15 14"/></svg>`;
 
 // Some competitions (Division 2, Division 3) split into sub-divisions in more recent
 // seasons, and the sheet stores both winners in one cell for that season, e.g.
@@ -4417,6 +4431,8 @@ function renderHome(){
       ${homeCardHtml({id:"calendar", title:"Calendar", subtitle:"Every round, bye &amp; double week", color:"#28427c", icon:HOME_ICON_CALENDAR})}
       ${homeCardHtml({id:"honour", title:"Hall of Fame", subtitle:"Every champion since 2012-13", color:"#8B6914", icon:HOME_ICON_TROPHY})}
       ${homeCardHtml({id:"teams", title:"Teams", subtitle:"Search any club's profile", color:"#28427c", icon:HOME_ICON_TEAMS})}
+      ${homeCardHtml({id:"stats", title:"Statistics", subtitle:"Win streaks &amp; league-wide stats", color:"#28427c", icon:HOME_ICON_STATS})}
+      ${homeCardHtml({id:"history", title:"Past Seasons", subtitle:"Tables, results &amp; brackets from previous years", color:"#28427c", icon:HOME_ICON_HISTORY})}
     </div>
 
     <div class="section-head" style="margin-top:40px;">
@@ -4454,13 +4470,21 @@ function renderHome(){
 }
 
 function homeSnapshotHtml(){
-  const top3 = standings.slice(0, 3);
-  const top3Html = top3.length ? `
+  // Home page's currentDivision isn't "d1", so getTier()'s implicit lookup would use
+  // the wrong tier thresholds here — reference TIER_CONFIGS.d1 directly instead.
+  const d1Tiers = TIER_CONFIGS.d1;
+  const tierFor = (pos) => d1Tiers.find(t => pos <= t.upTo) || d1Tiers[d1Tiers.length-1];
+  const swatch = { "tier-champion":["#DCF2E3","#1F8A4C"], "tier-ecl":["#FFF6CC","#B8930A"], "tier-mid":["#E1E9F7","var(--pitch)"], "tier-relegation":["#F9E0DC","#A8443A"] };
+
+  const fullTableHtml = standings.length ? `
     <div class="table-wrap"><table class="standings compact home-mini-table"><thead><tr>
       <th>Pos</th><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th>
     </tr></thead><tbody>
-      ${top3.map(s=>`<tr><td>${s.pos}</td><td>${teamLink(s.team)}</td><td class="pts">${s.pts}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td></tr>`).join("")}
-    </tbody></table></div>` : `<p style="font-family:'Barlow',sans-serif;font-size:13px;color:#6b7c73;">No standings yet.</p>`;
+      ${standings.map(s=>`<tr class="${tierFor(s.pos).class}"><td>${s.pos}</td><td>${teamLink(s.team)}</td><td class="pts">${s.pts}</td><td>${s.w}</td><td>${s.d}</td><td>${s.l}</td></tr>`).join("")}
+    </tbody></table></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-family:'Barlow',sans-serif;font-size:11px;color:#6b7c73;">
+      ${d1Tiers.map(t=>{ const [bg,border] = swatch[t.class]; return `<span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${bg};border:1px solid ${border};margin-right:4px;vertical-align:middle;"></i>${t.label}</span>`; }).join("")}
+    </div>` : `<p style="font-family:'Barlow',sans-serif;font-size:13px;color:#6b7c73;">No standings yet.</p>`;
 
   const rounds = Object.keys(fixturesByRound).map(Number).sort((a,b)=>a-b);
   let lastScoredRound = null;
@@ -4500,7 +4524,7 @@ function homeSnapshotHtml(){
   }
 
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;">
-    <div>${top3Html}</div>
+    <div>${fullTableHtml}</div>
     <div>${resultsHtml}${nextHtml}</div>
   </div>`;
 }
