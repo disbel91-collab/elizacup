@@ -4420,19 +4420,12 @@ function parseFplTable(rows, titleText){
   }
   if(titleRow === -1) return { teams: [], debug: { titleFound: false } };
 
-  let headerRow = -1;
-  for(let r=titleRow; r<titleRow+6 && r<rows.length; r++){
-    const row = rows[r]||[];
-    const hasPos = row.some(c => (c||"").toString().trim().toUpperCase() === "POS");
-    const hasTeam = row.some(c => (c||"").toString().trim().toUpperCase() === "TEAM");
-    if(hasPos && hasTeam){ headerRow = r; break; }
-  }
-  if(headerRow === -1) return { teams: [], debug: { titleFound: true, titleRow, headerRow: -1 } };
-
+  // Confirmed: the header row is always exactly one row below the title row.
+  const headerRow = titleRow + 1;
   const hRow = rows[headerRow]||[];
-  // Only the TEAM column has a logo image sitting in the header-labelled cell (not
-  // exported via CSV), pushing the real name one column right — every other column's
-  // data lines up directly under its own header label, no shift needed.
+
+  // Every column has real header text — only TEAM needs a +1 shift, since its header
+  // cell holds a logo image (not exported via CSV) rather than the team name itself.
   const cols = {
     pos: findColByHeader(hRow,"POS"), team: findColByHeader(hRow,"TEAM")+1, pts: findColByHeader(hRow,"PTS"),
     w: findColByHeader(hRow,"W"), d: findColByHeader(hRow,"D"), l: findColByHeader(hRow,"L"),
