@@ -4430,14 +4430,14 @@ function parseFplTable(rows, titleText){
   if(headerRow === -1) return { teams: [], debug: { titleFound: true, titleRow, headerRow: -1 } };
 
   const hRow = rows[headerRow]||[];
-  const shift = (c) => c >= 0 ? c + 1 : c;
-  // Column C under "TEAM" holds a logo image (not exported via CSV) — the real data
-  // for every column actually starts one column to the right of its header label.
+  // Only the TEAM column has a logo image sitting in the header-labelled cell (not
+  // exported via CSV), pushing the real name one column right — every other column's
+  // data lines up directly under its own header label, no shift needed.
   const cols = {
-    pos: shift(findColByHeader(hRow,"POS")), team: shift(findColByHeader(hRow,"TEAM")), pts: shift(findColByHeader(hRow,"PTS")),
-    w: shift(findColByHeader(hRow,"W")), d: shift(findColByHeader(hRow,"D")), l: shift(findColByHeader(hRow,"L")),
-    ptsFor: shift(findColByHeader(hRow,"PTS +")), ptsAgn: shift(findColByHeader(hRow,"PTS -")),
-    diff: shift(findColByHeader(hRow,"DIFF")), status: shift(findColByHeader(hRow,"STATUS"))
+    pos: findColByHeader(hRow,"POS"), team: findColByHeader(hRow,"TEAM")+1, pts: findColByHeader(hRow,"PTS"),
+    w: findColByHeader(hRow,"W"), d: findColByHeader(hRow,"D"), l: findColByHeader(hRow,"L"),
+    ptsFor: findColByHeader(hRow,"PTS +"), ptsAgn: findColByHeader(hRow,"PTS -"),
+    diff: findColByHeader(hRow,"DIFF"), status: findColByHeader(hRow,"STATUS")
   };
 
   const teams = [];
@@ -4453,7 +4453,9 @@ function parseFplTable(rows, titleText){
       status: cols.status>=0 ? cell(rows[dr]||[],cols.status) : ""
     });
   }
-  return { teams, debug: { titleFound: true, titleRow, titleCol, headerRow, cols } };
+  const rawHeaderRow = hRow.map((c,ci)=> c ? `[${ci}]="${c.toString().trim()}"` : "").filter(Boolean).join(" ");
+  const rawFirstDataRow = (rows[headerRow+1]||[]).map((c,ci)=> c ? `[${ci}]="${c.toString().trim()}"` : "").filter(Boolean).join(" ");
+  return { teams, debug: { titleFound: true, titleRow, titleCol, headerRow, cols, rawHeaderRow, rawFirstDataRow } };
 }
 
 // Gameweek fixtures — now isolated column blocks (Team1/Score1/Score2/Team2), one
