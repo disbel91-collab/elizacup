@@ -4424,13 +4424,15 @@ function parseFplTable(rows, titleText){
   const headerRow = titleRow + 1;
   const hRow = rows[headerRow]||[];
 
-  // Every column has real header text — only TEAM needs a +1 shift, since its header
-  // cell holds a logo image (not exported via CSV) rather than the team name itself.
+  // POS/TEAM/STATUS have real header text. PTS/W/D/L/PTS+/PTS-/DIFF sit under small
+  // icon images instead (same as the live Eliza Cup table's icons for those columns),
+  // so their header cells never carry exportable text — their positions are fixed
+  // relative to the header row instead, confirmed against a real data row:
+  // PTS(8) W(10) D(11) L(12) PTS+(13) PTS-(14) DIFF(15).
   const cols = {
-    pos: findColByHeader(hRow,"POS"), team: findColByHeader(hRow,"TEAM")+1, pts: findColByHeader(hRow,"PTS"),
-    w: findColByHeader(hRow,"W"), d: findColByHeader(hRow,"D"), l: findColByHeader(hRow,"L"),
-    ptsFor: findColByHeader(hRow,"PTS +"), ptsAgn: findColByHeader(hRow,"PTS -"),
-    diff: findColByHeader(hRow,"DIFF"), status: findColByHeader(hRow,"STATUS")
+    pos: findColByHeader(hRow,"POS"), team: findColByHeader(hRow,"TEAM")+1,
+    pts: 8, w: 10, d: 11, l: 12, ptsFor: 13, ptsAgn: 14, diff: 15,
+    status: findColByHeader(hRow,"STATUS")
   };
 
   const teams = [];
